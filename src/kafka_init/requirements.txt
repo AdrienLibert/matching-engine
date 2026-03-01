@@ -1,2 +1,0 @@
-confluent-kafka==2.5.3
-pyyaml==6.0.2

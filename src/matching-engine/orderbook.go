@@ -1,10 +1,12 @@
 package main
 
+import "container/heap"
+
 type Heap interface {
+	heap.Interface
 	Push(x interface{})
 	Pop() interface{}
 	Peak() interface{}
-	Len() int
 }
 
 type MinHeap []float64
@@ -89,7 +91,7 @@ func (o *Orderbook) AddOrder(order *Order, orderAction string) {
 		if ok {
 			*val = append(*val, order)
 		} else {
-			o.BestBid.Push(price)
+			heap.Push(o.BestBid, price)
 			o.PriceToBuyOrders[price] = &[]*Order{order}
 		}
 	}
@@ -98,7 +100,7 @@ func (o *Orderbook) AddOrder(order *Order, orderAction string) {
 		if ok {
 			*val = append(*val, order)
 		} else {
-			o.BestAsk.Push(price)
+			heap.Push(o.BestAsk, price)
 			o.PriceToSellOrders[price] = &[]*Order{order}
 		}
 	}

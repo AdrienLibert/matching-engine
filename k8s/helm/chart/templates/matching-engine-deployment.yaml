@@ -1,0 +1,111 @@
+{{- $matchingEngine := index .Values "matching-engine" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: {{ .Release.Name }}-matching-engine
+  name: {{ .Release.Name }}-matching-engine
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-matching-engine
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-matching-engine
+    spec:
+      initContainers:
+        - name: wait-for-kafka-init-jobs
+          image: {{ .Values.kafkaInit.image.repository }}:{{ .Values.kafkaInit.image.tag }}
+          imagePullPolicy: IfNotPresent
+          command:
+            - python3
+            - -c
+            - |
+              import json
+              import ssl
+              import sys
+              import time
+              from urllib import request, error
+
+              namespace = "{{ .Values.namespace }}"
+              jobs = [
+                  "{{ .Release.Name }}-kafka-init-topics-job",
+                  "{{ .Release.Name }}-kafka-init-orderbook-job",
+              ]
+              timeout_seconds = 600
+              poll_interval_seconds = 2
+
+              token_path = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+              ca_path = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+              api_server = "https://kubernetes.default.svc"
+
+              with open(token_path, "r", encoding="utf-8") as file:
+                  token = file.read().strip()
+
+              ssl_context = ssl.create_default_context(cafile=ca_path)
+              headers = {"Authorization": f"Bearer {token}"}
+              started_at = time.time()
+
+              def fetch_job(job_name: str):
+                  url = f"{api_server}/apis/batch/v1/namespaces/{namespace}/jobs/{job_name}"
+                  req = request.Request(url, headers=headers)
+                  with request.urlopen(req, context=ssl_context, timeout=5) as response:
+                      return json.loads(response.read().decode("utf-8"))
+
+              while True:
+                  if time.time() - started_at > timeout_seconds:
+                      print("Timed out waiting for kafka-init jobs completion", file=sys.stderr)
+                      sys.exit(1)
+
+                  all_complete = True
+                  for job_name in jobs:
+                      try:
+                          job = fetch_job(job_name)
+                      except error.HTTPError as exc:
+                          print(f"Error fetching Job {job_name}: {exc.code} {exc.reason}", file=sys.stderr)
+                          all_complete = False
+                          continue
+                      except Exception as exc:
+                          print(f"Error fetching Job {job_name}: {exc}", file=sys.stderr)
+                          all_complete = False
+                          continue
+
+                      conditions = job.get("status", {}).get("conditions", [])
+                      condition_map = {item.get("type"): item.get("status") for item in conditions}
+
+                      if condition_map.get("Failed") == "True":
+                          print(f"Job {job_name} failed", file=sys.stderr)
+                          sys.exit(1)
+
+                      if condition_map.get("Complete") != "True":
+                          all_complete = False
+
+                  if all_complete:
+                      print("Kafka init jobs are complete")
+                      sys.exit(0)
+
+                  print("Waiting for kafka-init jobs to complete...")
+                  time.sleep(poll_interval_seconds)
+      containers:
+        - name: matching-engine
+          image: {{ $matchingEngine.image.repository }}:{{ $matchingEngine.image.tag }}
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: OB__KAFKA__BOOTSTRAP_SERVERS
+              value: bitnami-kafka:9092
+            - name: OB__KAFKA__SECURITY_PROTOCOL
+              value: PLAINTEXT
+          ports:
+            - name: metrics
+              containerPort: {{ $matchingEngine.metrics.port }}
+              protocol: TCP
+          resources:
+            requests:
+              cpu: {{ $matchingEngine.resources.requests.cpu }}
+              memory: {{ $matchingEngine.resources.requests.memory }}
+            limits:
+              cpu: {{ $matchingEngine.resources.limits.cpu }}
+              memory: {{ $matchingEngine.resources.limits.memory }}

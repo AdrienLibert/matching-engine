@@ -1,0 +1,26 @@
+alertmanager:
+  enabled: false
+
+kube-state-metrics:
+  enabled: false
+
+prometheus-node-exporter:
+  enabled: false
+
+prometheus-pushgateway:
+  enabled: false
+
+server:
+  persistentVolume:
+    enabled: false
+  service:
+    type: ClusterIP
+
+serverFiles:
+  prometheus.yml:
+    scrape_configs:
+      - job_name: matching_engine
+        metrics_path: /metrics
+        static_configs:
+          - targets:
+              - matching-engine-matching-engine-metrics.matching-engine.svc.cluster.local:2112

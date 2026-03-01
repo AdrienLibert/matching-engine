@@ -16,11 +16,18 @@
             "type": "number"
         },
         "quantity": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 1,
+            "description": "Quantity is normalized to a strictly positive value. Side is expressed through action."
+        },
+        "action": {
+            "type": "string",
+            "enum": ["BUY", "SELL"],
+            "description": "Explicit order side metadata used with unsigned quantity."
         },
         "timestamp": {
             "type": "integer"
         }
     },
-    "required": ["order_id", "order_type", "price", "quantity", "timestamp"]
+    "required": ["order_id", "order_type", "price", "quantity", "action", "timestamp"]
 }

@@ -1,13 +1,11 @@
 controller:
   replicaCount: 1
 externalAccess:
-  enabled: true
+  enabled: false
   controller:
     service:
       type: NodePort
       domain: "localhost"
-      nodePorts:
-      - 30001
 listeners:
   client:
     name: CLIENT

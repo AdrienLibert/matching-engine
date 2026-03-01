@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"os"
+	"time"
 )
 
 // utils
@@ -26,9 +29,21 @@ func getenv(key, fallback string) string {
 
 func main() {
 	fmt.Println("INFO: starting orderbook")
+	metrics := NewEngineMetrics()
+	metricsAddress := getenv("METRICS_ADDRESS", ":2112")
+	metricsPath := getenv("METRICS_PATH", "/metrics")
+	metricsServer := StartMetricsServer(metricsAddress, metricsPath, metrics)
+
 	me := NewMatchingEngine(
 		NewKafkaClient(),
 		NewOrderBook(),
 	)
+	me.SetMetrics(metrics)
 	me.Start()
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := metricsServer.Shutdown(shutdownCtx); err != nil {
+		log.Printf("ERROR: metrics server shutdown failed: %v", err)
+	}
 }

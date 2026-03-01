@@ -1,10 +1,12 @@
 package main
 
 import (
+	"container/heap"
 	"fmt"
 	"math"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
 
 	"github.com/IBM/sarama"
@@ -14,6 +16,7 @@ import (
 type MatchingEngine struct {
 	kafkaClient     *KafkaClient
 	orderBook       *Orderbook
+	metrics         *EngineMetrics
 	quoteTopic      string
 	tradeTopic      string
 	pricePointTopic string
@@ -23,10 +26,15 @@ func NewMatchingEngine(kafkaClient *KafkaClient, orderBook *Orderbook) *Matching
 	me := new(MatchingEngine)
 	me.kafkaClient = kafkaClient
 	me.orderBook = orderBook
+	me.metrics = nil
 	me.quoteTopic = "orders.topic"
 	me.tradeTopic = "trades.topic"
 	me.pricePointTopic = "order.last_price.topic"
 	return me
+}
+
+func (me *MatchingEngine) SetMetrics(metrics *EngineMetrics) {
+	me.metrics = metrics
 }
 
 func (me *MatchingEngine) Start() {
@@ -53,6 +61,9 @@ func (me *MatchingEngine) Start() {
 				} else {
 					fmt.Println("INFO: produced trade:", producerMessage)
 					producedCount++
+					if me.metrics != nil {
+						me.metrics.ProducedMessagesCounter.Inc()
+					}
 				}
 			case <-signals:
 				fmt.Println("INFO: interrupt is detected... closing trade producer...")
@@ -74,6 +85,9 @@ func (me *MatchingEngine) Start() {
 				} else {
 					fmt.Println("INFO: produced price point:", producerMessage)
 					producedCount++
+					if me.metrics != nil {
+						me.metrics.ProducedMessagesCounter.Inc()
+					}
 				}
 			case <-signals:
 				fmt.Println("INFO: interrupt is detected... closing price point producer...")
@@ -113,9 +127,15 @@ func (me *MatchingEngine) Start() {
 		for {
 			select {
 			case msg := <-orderMessages:
+				if me.metrics != nil {
+					me.metrics.ConsumedOrdersCounter.Inc()
+				}
 				order, err := messageToOrder(msg.Value)
 				if err != nil {
 					fmt.Println("ERROR: malformed message:", msg.Value)
+					if me.metrics != nil {
+						me.metrics.RejectedMalformedCounter.Inc()
+					}
 				} else {
 					fmt.Println("DEBUG: received quote:", order)
 					consumedCount++
@@ -143,13 +163,41 @@ func Min(a, b int64) int64 {
 }
 
 func (me *MatchingEngine) Process(inOrder *Order, producerChannel chan<- Trade, pricePointChannel chan<- PricePoint) {
+	processStart := time.Now()
+	matchCount := 0
+	defer func() {
+		if me.metrics != nil {
+			me.metrics.ProcessDurationHistogram.Observe(time.Since(processStart).Seconds())
+			me.metrics.PerOrderMatchCountHistogram.Observe(float64(matchCount))
+		}
+		me.updateOrderbookGauges()
+	}()
+
 	var oppositeBook *map[float64]*[]*Order
 	var oppositeBestPrice Heap
 	var inAction string
 	var outAction string
 	var comparator func(x, y float64) bool
 
-	if inOrder.Quantity > 0 {
+	if strings.EqualFold(inOrder.Action, "BUY") {
+		oppositeBook = &me.orderBook.PriceToSellOrders
+		oppositeBestPrice = me.orderBook.BestAsk
+		inAction = "BUY"
+		outAction = "SELL"
+		if inOrder.Quantity < 0 {
+			inOrder.Quantity = -inOrder.Quantity
+		}
+		comparator = func(x, y float64) bool { return x >= y }
+	} else if strings.EqualFold(inOrder.Action, "SELL") {
+		oppositeBook = &me.orderBook.PriceToBuyOrders
+		oppositeBestPrice = me.orderBook.BestBid
+		inAction = "SELL"
+		outAction = "BUY"
+		if inOrder.Quantity < 0 {
+			inOrder.Quantity = -inOrder.Quantity
+		}
+		comparator = func(x, y float64) bool { return x <= y }
+	} else if inOrder.Quantity > 0 {
 		oppositeBook = &me.orderBook.PriceToSellOrders
 		oppositeBestPrice = me.orderBook.BestAsk
 		inAction = "BUY"
@@ -174,6 +222,10 @@ func (me *MatchingEngine) Process(inOrder *Order, producerChannel chan<- Trade, 
 			price := outOrder.Price
 			tradeId := uuid.New().String()
 			ts := time.Now().Unix()
+			matchCount++
+			if me.metrics != nil {
+				me.metrics.ExecutedTradesCounter.Inc()
+			}
 			fmt.Printf(
 				"INFO: Executed trade %s @ %d: %s %d @ %f | Left Order ID: %s, Right Order ID: %s | "+
 					"Left Quantity: %d, Right Quantity: %d\n",
@@ -197,11 +249,60 @@ func (me *MatchingEngine) Process(inOrder *Order, producerChannel chan<- Trade, 
 			}
 		}
 		if len(*oppositeBestPriceQueue) == 0 {
-			bestPrice := oppositeBestPrice.Pop().(float64)
+			bestPrice := heap.Pop(oppositeBestPrice).(float64)
 			delete(*oppositeBook, bestPrice)
 		}
 	}
 	if inOrder.Quantity > 0 { // don't add if empty
 		me.orderBook.AddOrder(inOrder, inAction)
 	}
+}
+
+func (me *MatchingEngine) updateOrderbookGauges() {
+	if me.metrics == nil || me.orderBook == nil {
+		return
+	}
+
+	bestBid := 0.0
+	if me.orderBook.BestBid != nil && me.orderBook.BestBid.Len() > 0 {
+		bestBid = me.orderBook.BestBid.Peak().(float64)
+	}
+
+	bestAsk := 0.0
+	if me.orderBook.BestAsk != nil && me.orderBook.BestAsk.Len() > 0 {
+		bestAsk = me.orderBook.BestAsk.Peak().(float64)
+	}
+
+	midPrice := 0.0
+	spread := 0.0
+	if bestBid > 0 && bestAsk > 0 {
+		midPrice = (bestBid + bestAsk) / 2
+		spread = bestAsk - bestBid
+	}
+
+	me.metrics.BestBidGauge.Set(bestBid)
+	me.metrics.BestAskGauge.Set(bestAsk)
+	me.metrics.MidPriceGauge.Set(midPrice)
+	me.metrics.SpreadGauge.Set(spread)
+	me.metrics.OpenOrderCountGauge.Set(float64(me.openOrderCount()))
+}
+
+func (me *MatchingEngine) openOrderCount() int {
+	if me.orderBook == nil {
+		return 0
+	}
+
+	count := 0
+	for _, orders := range me.orderBook.PriceToBuyOrders {
+		if orders != nil {
+			count += len(*orders)
+		}
+	}
+	for _, orders := range me.orderBook.PriceToSellOrders {
+		if orders != nil {
+			count += len(*orders)
+		}
+	}
+
+	return count
 }

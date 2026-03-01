@@ -1,4 +1,4 @@
-namespace: orderbook
+namespace: matching-engine
 replicaCount: 1
 
 kafkaInit:
@@ -22,10 +22,14 @@ traderpool:
       cpu: "100m"
       memory: "128Mi"
 
-orderbook:
+matching-engine:
   image:
-    repository: local/orderbook
+    repository: local/matching-engine
     tag: latest
+  metrics:
+    enabled: true
+    port: 2112
+    path: /metrics
   resources:
     requests:
       cpu: "50m"
