@@ -1,4 +1,3 @@
-import json
 import time
 import uuid
 import yaml
@@ -11,6 +10,7 @@ from datetime import datetime, timezone
 from enum import StrEnum
 from drgn.config import env_config
 from drgn.kafka import kafka_config
+import orderbook_pb2
 
 from typing import cast
 
@@ -123,7 +123,7 @@ class ColdStartOrders:
         self._starting_bid = mid_price - spread / 2
         self._starting_ask = mid_price + spread / 2
 
-    def _produce_or_raise(self, order: dict):
+    def _produce_or_raise(self, order: orderbook_pb2.Order):
         delivery_error = None
         delivered = False
 
@@ -131,7 +131,7 @@ class ColdStartOrders:
             nonlocal delivery_error, delivered
             if err is not None:
                 delivery_error = RuntimeError(
-                    f"failed to deliver order {order['order_id']}: {err}"
+                    f"failed to deliver order {order.order_id}: {err}"
                 )
                 return
 
@@ -141,12 +141,12 @@ class ColdStartOrders:
         try:
             self.producer.produce(
                 "orders.topic",
-                bytes(json.dumps(order), "utf-8"),
+                order.SerializeToString(),
                 on_delivery=on_delivery,
             )
         except Exception as exc:
             raise RuntimeError(
-                f"failed to enqueue order {order['order_id']}: {exc}"
+                f"failed to enqueue order {order.order_id}: {exc}"
             ) from exc
 
         pending_messages = self.producer.flush(self._delivery_timeout)
@@ -156,27 +156,27 @@ class ColdStartOrders:
 
         if pending_messages > 0 or not delivered:
             raise RuntimeError(
-                f"failed to deliver order {order['order_id']} within {self._delivery_timeout}s"
+                f"failed to deliver order {order.order_id} within {self._delivery_timeout}s"
             )
 
     def produce_orders(self):
         now = int(datetime.now(timezone.utc).timestamp() * 1000000000)
-        buy_order = {
-            "order_id": str(uuid.uuid4()),
-            "order_type": "limit",
-            "price": self._starting_bid,
-            "quantity": self.quantity,
-            "action": "BUY",
-            "timestamp": now,
-        }
-        sell_order = {
-            "order_id": str(uuid.uuid4()),
-            "order_type": "limit",
-            "price": self._starting_ask,
-            "quantity": self.quantity,
-            "action": "SELL",
-            "timestamp": now,
-        }
+        buy_order = orderbook_pb2.Order(
+            order_id=str(uuid.uuid4()),
+            order_type="limit",
+            price=self._starting_bid,
+            quantity=self.quantity,
+            action="BUY",
+            timestamp=now,
+        )
+        sell_order = orderbook_pb2.Order(
+            order_id=str(uuid.uuid4()),
+            order_type="limit",
+            price=self._starting_ask,
+            quantity=self.quantity,
+            action="SELL",
+            timestamp=now,
+        )
 
         self._produce_or_raise(buy_order)
         self._produce_or_raise(sell_order)

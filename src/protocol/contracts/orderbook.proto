@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package orderbook;
+
+option go_package = "orderbookpb/contracts;contracts";
+
+message Order {
+  string order_id = 1;
+  string order_type = 2;
+  double price = 3;
+  int64 quantity = 4;
+  string action = 5;
+  int64 timestamp = 6;
+}
+
+message Trade {
+  string trade_id = 1;
+  string order_id = 2;
+  int64 quantity = 3;
+  double price = 4;
+  string action = 5;
+  string status = 6;
+  int64 timestamp = 7;
+}
+
+message PricePoint {
+  double price = 1;
+}

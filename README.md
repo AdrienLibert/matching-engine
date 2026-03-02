@@ -1,10 +1,23 @@
 # LOB Matching Engine
 
-## Architecture
+## How the System Operates (End-to-End)
 
-- Kafka: communication between trades and matching engine
-- Matching engine: pure go LOB
-- Traderpools: pure go of some buy / sell trading strategies
+1. The stack runs on a **local Kubernetes cluster** (Docker VM + Helm/Kubectl).
+2. **Kafka (Bitnami)** provides asynchronous communication between services.
+3. **Kafka-init** creates/configures required topics and startup state.
+4. **Traderpool** services generate and publish buy/sell limit orders.
+5. The **Matching Engine** consumes orders, updates the in-memory LOB, matches compatible orders, and emits resulting market events.
+6. Consumers/scripts can subscribe to those events for observation and visualization.
+
+In short: traders publish orders -> matching engine processes LOB state -> matched outcomes and prices are published back through Kafka.
+
+## Components
+
+- **Kafka (Bitnami):** async event bus between engine and traders
+- **Kafka-init:** one-time job for topics/config of kafka
+- **Matching Engine (Go):** orderbook data structure + matching logic
+- **Traderpool (Go):** order generators/participants
+- **Grafana (TODO):** live monitoring and dashboards
 
 ## Structures
 ### Orderbook

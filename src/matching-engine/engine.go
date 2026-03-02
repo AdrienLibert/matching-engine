@@ -54,12 +54,24 @@ func (me *MatchingEngine) Start() {
 		for {
 			select {
 			case trade := <-tradeMessages:
-				producerMessage := sarama.ProducerMessage{Topic: me.tradeTopic, Value: sarama.StringEncoder(trade.toJSON())}
+				producerMessage := sarama.ProducerMessage{Topic: me.tradeTopic, Value: sarama.ByteEncoder(trade.toMessage())}
 				par, off, err := (*tradeProducer).SendMessage(&producerMessage)
 				if err != nil {
 					fmt.Printf("ERROR: producing trade in partition %d, offset %d: %s", par, off, err)
 				} else {
-					fmt.Println("INFO: produced trade:", producerMessage)
+					fmt.Printf(
+						"INFO: produced trade topic=%s partition=%d offset=%d trade_id=%s order_id=%s action=%s quantity=%d price=%.6f status=%s timestamp=%d\n",
+						me.tradeTopic,
+						par,
+						off,
+						trade.TradeId,
+						trade.OrderId,
+						trade.Action,
+						trade.Quantity,
+						trade.Price,
+						trade.Status,
+						trade.Timestamp,
+					)
 					producedCount++
 					if me.metrics != nil {
 						me.metrics.ProducedMessagesCounter.Inc()
@@ -78,12 +90,18 @@ func (me *MatchingEngine) Start() {
 		for {
 			select {
 			case pricePoint := <-pricePointMessages:
-				producerMessage := sarama.ProducerMessage{Topic: me.pricePointTopic, Value: sarama.StringEncoder(pricePoint.toJSON())}
+				producerMessage := sarama.ProducerMessage{Topic: me.pricePointTopic, Value: sarama.ByteEncoder(pricePoint.toMessage())}
 				par, off, err := (*pricePointProducer).SendMessage(&producerMessage)
 				if err != nil {
 					fmt.Printf("ERROR: producing price point in partition %d, offset %d: %s", par, off, err)
 				} else {
-					fmt.Println("INFO: produced price point:", producerMessage)
+					fmt.Printf(
+						"INFO: produced price point topic=%s partition=%d offset=%d price=%.6f\n",
+						me.pricePointTopic,
+						par,
+						off,
+						pricePoint.Price,
+					)
 					producedCount++
 					if me.metrics != nil {
 						me.metrics.ProducedMessagesCounter.Inc()

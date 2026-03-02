@@ -9,10 +9,10 @@ build_kafkainit:
 	docker build --no-cache -t local/kafka-init -f src/kafka_init/Dockerfile src/kafka_init/
 
 build_matching_engine:
-	docker build --no-cache -t local/matching-engine -f src/matching-engine/Dockerfile src/matching-engine/
+	docker build --no-cache -t local/matching-engine -f src/matching-engine/Dockerfile .
 
 build_traderpool:
-	docker build --no-cache -t local/traderpool -f src/traderpool/Dockerfile src/traderpool/
+	docker build --no-cache -t local/traderpool -f src/traderpool/Dockerfile .
 
 build: build_kafkainit build_matching_engine build_traderpool
 
