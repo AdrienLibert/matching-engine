@@ -1,10 +1,12 @@
 package main
 
+import "container/heap"
+
 type Heap interface {
+	heap.Interface
 	Push(x interface{})
 	Pop() interface{}
 	Peak() interface{}
-	Len() int
 }
 
 type MinHeap []float64
@@ -63,6 +65,7 @@ type Orderbook struct {
 	BestBid       *MaxHeap
 	BestAsk       *MinHeap
 	PriceToVolume map[float64]float64
+	openOrderCount int
 	// indexes + containers
 	PriceToBuyOrders  map[float64]*[]*Order
 	PriceToSellOrders map[float64]*[]*Order
@@ -89,17 +92,36 @@ func (o *Orderbook) AddOrder(order *Order, orderAction string) {
 		if ok {
 			*val = append(*val, order)
 		} else {
-			o.BestBid.Push(price)
+			heap.Push(o.BestBid, price)
 			o.PriceToBuyOrders[price] = &[]*Order{order}
 		}
+		o.openOrderCount++
 	}
 	if orderAction == "SELL" {
 		val, ok := o.PriceToSellOrders[price]
 		if ok {
 			*val = append(*val, order)
 		} else {
-			o.BestAsk.Push(price)
+			heap.Push(o.BestAsk, price)
 			o.PriceToSellOrders[price] = &[]*Order{order}
 		}
+		o.openOrderCount++
 	}
+}
+
+func (o *Orderbook) decrementOpenOrderCount() {
+	if o == nil {
+		return
+	}
+	if o.openOrderCount > 0 {
+		o.openOrderCount--
+	}
+}
+
+func (o *Orderbook) OpenOrderCount() int {
+	if o == nil {
+		return 0
+	}
+
+	return o.openOrderCount
 }

@@ -6,12 +6,18 @@ import (
 	"github.com/IBM/sarama"
 )
 
+type KafkaConsumerAdmin interface {
+	Partitions(topic string) ([]int32, error)
+	Topics() ([]string, error)
+	ConsumePartition(topic string, partition int32, offset int64) (sarama.PartitionConsumer, error)
+}
+
 type KafkaClient struct {
 	commonConfig   *sarama.Config
 	consumerConfig *sarama.Config
 	producerConfig *sarama.Config
 	brokers        []string
-	adminClient    *sarama.Consumer
+	adminClient    KafkaConsumerAdmin
 }
 
 func NewKafkaClient() *KafkaClient {
@@ -39,7 +45,7 @@ func NewKafkaClient() *KafkaClient {
 	return kc
 }
 
-func (kc *KafkaClient) GetConsumer() *sarama.Consumer {
+func (kc *KafkaClient) GetConsumer() sarama.Consumer {
 	consumer, err := sarama.NewConsumer(kc.brokers, kc.consumerConfig)
 	if err != nil {
 		panic(err)
@@ -49,7 +55,7 @@ func (kc *KafkaClient) GetConsumer() *sarama.Consumer {
 			panic(err)
 		}
 	}()
-	return &consumer
+	return consumer
 }
 
 func (kc *KafkaClient) GetProducer() *sarama.SyncProducer {
@@ -67,33 +73,67 @@ func (kc *KafkaClient) GetProducer() *sarama.SyncProducer {
 
 func (kc *KafkaClient) ConsumerMessagesChan(topic string) (chan *sarama.ConsumerMessage, chan *sarama.ConsumerError) {
 	consumers := make(chan *sarama.ConsumerMessage)
-	errors := make(chan *sarama.ConsumerError)
+	errors := make(chan *sarama.ConsumerError, 1)
 
-	partitions, _ := (*kc.adminClient).Partitions(topic)
-	topics, err := (*kc.adminClient).Topics()
-	if err != nil {
-		panic(err)
+	emitSetupError := func(err error) {
+		errors <- &sarama.ConsumerError{Topic: topic, Partition: -1, Err: err}
+		close(consumers)
+		close(errors)
 	}
+
+	partitions, err := kc.adminClient.Partitions(topic)
+	if err != nil {
+		emitSetupError(fmt.Errorf("failed to fetch partitions for topic %s: %w", topic, err))
+		return consumers, errors
+	}
+	if len(partitions) == 0 {
+		emitSetupError(fmt.Errorf("no partitions found for topic %s", topic))
+		return consumers, errors
+	}
+
+	topics, err := kc.adminClient.Topics()
+	if err != nil {
+		emitSetupError(fmt.Errorf("failed to list topics while subscribing to %s: %w", topic, err))
+		return consumers, errors
+	}
+
+	foundTopic := false
+	for _, availableTopic := range topics {
+		if availableTopic == topic {
+			foundTopic = true
+			break
+		}
+	}
+	if !foundTopic {
+		emitSetupError(fmt.Errorf("topic %s not found", topic))
+		return consumers, errors
+	}
+
 	fmt.Println("DEBUG: topics: ", topics)
-	consumer, err := (*kc.adminClient).ConsumePartition(
+	consumer, err := kc.adminClient.ConsumePartition(
 		topic,
 		partitions[0], // TODO: only first partition for now
 		sarama.OffsetOldest,
 	)
-
 	if err != nil {
-		fmt.Printf("ERROR: topic %v partitions %v", topic, partitions)
-		panic(err)
+		emitSetupError(fmt.Errorf("failed to consume topic %s partition %d: %w", topic, partitions[0], err))
+		return consumers, errors
 	}
 	fmt.Println("INFO: start consuming topic: ", topic)
 
 	go func(topic string, consumer sarama.PartitionConsumer) {
 		for {
 			select {
-			case consumerError := <-consumer.Errors():
+			case consumerError, ok := <-consumer.Errors():
+				if !ok {
+					return
+				}
 				errors <- consumerError
 				fmt.Println("ERROR: not able to consume: ", consumerError.Err)
-			case msg := <-consumer.Messages():
+			case msg, ok := <-consumer.Messages():
+				if !ok {
+					return
+				}
 				consumers <- msg
 			}
 		}

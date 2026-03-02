@@ -1,0 +1,60 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  labels:
+    app: {{ .Release.Name }}-kafka-init-topics-job
+  name: {{ .Release.Name }}-kafka-init-topics-job
+  namespace: {{ .Values.namespace }}
+spec:
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-kafka-init-topics-job
+    spec:
+      initContainers:
+      - name: wait-for-kafka
+        image: {{ .Values.kafkaInit.image.repository }}:{{ .Values.kafkaInit.image.tag }}
+        imagePullPolicy: IfNotPresent
+        command:
+        - python3
+        - -c
+        - |
+          import socket
+          import sys
+          import time
+
+          host = "bitnami-kafka"
+          port = 9092
+          timeout_seconds = 180
+          started_at = time.time()
+
+          while True:
+              try:
+                  with socket.create_connection((host, port), timeout=3):
+                      print(f"Kafka is reachable at {host}:{port}")
+                      break
+              except OSError as exc:
+                  elapsed = time.time() - started_at
+                  if elapsed >= timeout_seconds:
+                      print(f"Timed out waiting for Kafka at {host}:{port}: {exc}", file=sys.stderr)
+                      sys.exit(1)
+                  print(f"Waiting for Kafka at {host}:{port}... ({int(elapsed)}s elapsed)")
+                  time.sleep(2)
+      containers:
+      - name: kafka-init-topics
+        image: {{ .Values.kafkaInit.image.repository }}:{{ .Values.kafkaInit.image.tag }}
+        imagePullPolicy: IfNotPresent
+        command: ["python3", "entrypoint.py", "--init-topics"]
+        env:
+        - name: OB__KAFKA__TOPICS_CONFIG
+          value: /app/topics_config.yaml
+        - name: OB__KAFKA__BOOTSTRAP_SERVERS
+          value: bitnami-kafka:9092
+        - name: OB__KAFKA__SECURITY_PROTOCOL
+          value: PLAINTEXT
+        - name: CONFIG_PATH
+          value: /app/task.conf
+        - name: PYTHONUNBUFFERED
+          value: "1"
+      restartPolicy: Never

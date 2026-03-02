@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 type Order struct {
@@ -10,6 +11,7 @@ type Order struct {
 	OrderType string  `json:"order_type"`
 	Price     float64 `json:"price"`
 	Quantity  int64   `json:"quantity"`
+	Action    string  `json:"action"`
 	Timestamp int64   `json:"timestamp"`
 }
 
@@ -48,6 +50,16 @@ func messageToOrder(messageValue []byte) (Order, error) {
 	if err := json.Unmarshal(messageValue, order); err != nil {
 		return Order{}, err
 	}
+
+	if order.Quantity <= 0 {
+		return Order{}, fmt.Errorf("invalid order quantity: must be > 0")
+	}
+
+	order.Action = strings.ToUpper(strings.TrimSpace(order.Action))
+	if order.Action != "BUY" && order.Action != "SELL" {
+		return Order{}, fmt.Errorf("invalid order action: %s", order.Action)
+	}
+
 	return *order, nil
 }
 

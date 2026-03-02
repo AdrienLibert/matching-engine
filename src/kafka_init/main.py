@@ -20,10 +20,6 @@ def load_yaml(path: str) -> dict:
         return yaml.safe_load(file)
 
 
-def delivery(err, msg):
-    print(f"INFO: {msg.value()}")
-
-
 class TopicConfig:
     def __init__(self, topic_dict: dict):
         self.topic_name = list(topic_dict.keys())[0]
@@ -122,9 +118,46 @@ class ColdStartOrders:
     ):
         self.quantity = quantity
         self.producer = producer
+        self._delivery_timeout = 3.0
 
         self._starting_bid = mid_price - spread / 2
         self._starting_ask = mid_price + spread / 2
+
+    def _produce_or_raise(self, order: dict):
+        delivery_error = None
+        delivered = False
+
+        def on_delivery(err, msg):
+            nonlocal delivery_error, delivered
+            if err is not None:
+                delivery_error = RuntimeError(
+                    f"failed to deliver order {order['order_id']}: {err}"
+                )
+                return
+
+            delivered = True
+            print(f"INFO: produced order {msg.key() or b''} {msg.value()}")
+
+        try:
+            self.producer.produce(
+                "orders.topic",
+                bytes(json.dumps(order), "utf-8"),
+                on_delivery=on_delivery,
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                f"failed to enqueue order {order['order_id']}: {exc}"
+            ) from exc
+
+        pending_messages = self.producer.flush(self._delivery_timeout)
+
+        if delivery_error is not None:
+            raise delivery_error
+
+        if pending_messages > 0 or not delivered:
+            raise RuntimeError(
+                f"failed to deliver order {order['order_id']} within {self._delivery_timeout}s"
+            )
 
     def produce_orders(self):
         now = int(datetime.now(timezone.utc).timestamp() * 1000000000)
@@ -133,25 +166,20 @@ class ColdStartOrders:
             "order_type": "limit",
             "price": self._starting_bid,
             "quantity": self.quantity,
+            "action": "BUY",
             "timestamp": now,
         }
         sell_order = {
             "order_id": str(uuid.uuid4()),
             "order_type": "limit",
             "price": self._starting_ask,
-            "quantity": -self.quantity,
+            "quantity": self.quantity,
+            "action": "SELL",
             "timestamp": now,
         }
 
-        self.producer.produce(
-            "orders.topic", bytes(json.dumps(buy_order), "utf-8"), on_delivery=delivery
-        )
-        self.producer.poll()
-
-        self.producer.produce(
-            "orders.topic", bytes(json.dumps(sell_order), "utf-8"), on_delivery=delivery
-        )
-        self.producer.poll()
+        self._produce_or_raise(buy_order)
+        self._produce_or_raise(sell_order)
 
     def run(self):
         print(

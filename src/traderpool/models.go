@@ -5,6 +5,7 @@ type Order struct {
 	OrderType string  `json:"order_type"`
 	Price     float64 `json:"price"`
 	Quantity  int64   `json:"quantity"`
+	Action    string  `json:"action"`
 	Timestamp int64   `json:"timestamp"`
 }
 

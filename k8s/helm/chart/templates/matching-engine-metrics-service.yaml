@@ -1,0 +1,19 @@
+{{- $matchingEngine := index .Values "matching-engine" -}}
+{{- if $matchingEngine.metrics.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-matching-engine-metrics
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: {{ .Release.Name }}-matching-engine
+spec:
+  type: ClusterIP
+  selector:
+    app: {{ .Release.Name }}-matching-engine
+  ports:
+    - name: metrics
+      port: {{ $matchingEngine.metrics.port }}
+      targetPort: metrics
+      protocol: TCP
+{{- end }}
