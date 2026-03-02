@@ -324,3 +324,22 @@ func TestMatchingEngineProcessEventFieldsSellFlow(t *testing.T) {
 	assert.Equal(t, []int64{2}, levelQuantities(orderbook.PriceToBuyOrders[10.0]))
 	assert.Equal(t, []string{"buy-2"}, levelOrderIDs(orderbook.PriceToBuyOrders[10.0]))
 }
+
+func TestMatchingEngineOpenOrderCountRemainsO1AndAccurate(t *testing.T) {
+	orderbook := NewOrderBook()
+	matchingEngine := NewMatchingEngine(nil, orderbook)
+	now := time.Now().UTC().Unix()
+
+	restingSell1 := Order{OrderID: "sell-1", OrderType: "limit", Price: 10.0, Quantity: -5, Timestamp: now}
+	restingSell2 := Order{OrderID: "sell-2", OrderType: "limit", Price: 10.0, Quantity: -3, Timestamp: now}
+	matchingEngine.Process(&restingSell1, nil, nil)
+	matchingEngine.Process(&restingSell2, nil, nil)
+	assert.Equal(t, 2, orderbook.OpenOrderCount())
+
+	incomingBuy := Order{OrderID: "buy-in", OrderType: "limit", Price: 10.0, Quantity: 6, Timestamp: now}
+	matchingEngine.Process(&incomingBuy, nil, nil)
+
+	assert.Equal(t, 1, orderbook.OpenOrderCount())
+	assert.Equal(t, []string{"sell-2"}, levelOrderIDs(orderbook.PriceToSellOrders[10.0]))
+	assert.Equal(t, []int64{2}, levelQuantities(orderbook.PriceToSellOrders[10.0]))
+}

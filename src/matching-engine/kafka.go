@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/IBM/sarama"
 )
@@ -97,14 +98,7 @@ func (kc *KafkaClient) ConsumerMessagesChan(topic string) (chan *sarama.Consumer
 		return consumers, errors
 	}
 
-	foundTopic := false
-	for _, availableTopic := range topics {
-		if availableTopic == topic {
-			foundTopic = true
-			break
-		}
-	}
-	if !foundTopic {
+	if !slices.Contains(topics, topic) {
 		emitSetupError(fmt.Errorf("topic %s not found", topic))
 		return consumers, errors
 	}

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"orderbookpb/contracts"
+	"slices"
 
 	"github.com/IBM/sarama"
 	"google.golang.org/protobuf/proto"
@@ -73,14 +74,39 @@ func (kc *KafkaClient) GetProducer() *sarama.SyncProducer {
 
 func (kc *KafkaClient) Assign(master sarama.Consumer, topic string) (chan *sarama.ConsumerMessage, chan *sarama.ConsumerError) {
 	consumers := make(chan *sarama.ConsumerMessage)
-	errors := make(chan *sarama.ConsumerError)
+	errors := make(chan *sarama.ConsumerError, 1)
 
-	partitions, _ := master.Partitions(topic)
+	partitions, err := master.Partitions(topic)
+	if err != nil {
+		errors <- &sarama.ConsumerError{Topic: topic, Err: fmt.Errorf("unable to list partitions for topic %s: %w", topic, err)}
+		close(consumers)
+		close(errors)
+		return consumers, errors
+	}
+
 	topics, err := master.Topics()
 	if err != nil {
-		panic(err)
+		errors <- &sarama.ConsumerError{Topic: topic, Err: fmt.Errorf("unable to list topics: %w", err)}
+		close(consumers)
+		close(errors)
+		return consumers, errors
 	}
 	fmt.Println("DEBUG: topics: ", topics)
+
+	if !slices.Contains(topics, topic) {
+		errors <- &sarama.ConsumerError{Topic: topic, Err: fmt.Errorf("topic %s not found", topic)}
+		close(consumers)
+		close(errors)
+		return consumers, errors
+	}
+
+	if len(partitions) == 0 {
+		errors <- &sarama.ConsumerError{Topic: topic, Err: fmt.Errorf("no partitions found for topic %s", topic)}
+		close(consumers)
+		close(errors)
+		return consumers, errors
+	}
+
 	consumer, err := master.ConsumePartition(
 		topic,
 		partitions[0], // TODO: only first partition for now
@@ -89,16 +115,27 @@ func (kc *KafkaClient) Assign(master sarama.Consumer, topic string) (chan *saram
 
 	if err != nil {
 		fmt.Printf("ERROR: topic %v partitions %v", topic, partitions)
-		panic(err)
+		errors <- &sarama.ConsumerError{Topic: topic, Partition: partitions[0], Err: fmt.Errorf("unable to consume partition for topic %s: %w", topic, err)}
+		close(consumers)
+		close(errors)
+		return consumers, errors
 	}
 
 	go func(topic string, consumer sarama.PartitionConsumer) {
+		defer close(consumers)
+		defer close(errors)
 		for {
 			select {
-			case consumerError := <-consumer.Errors():
+			case consumerError, ok := <-consumer.Errors():
+				if !ok {
+					return
+				}
 				errors <- consumerError
 				fmt.Println("ERROR: not able to consume: ", consumerError.Err)
-			case msg := <-consumer.Messages():
+			case msg, ok := <-consumer.Messages():
+				if !ok {
+					return
+				}
 				consumers <- msg
 			}
 		}

@@ -2,10 +2,9 @@ package main
 
 import (
 	"container/heap"
+	"context"
 	"fmt"
 	"math"
-	"os"
-	"os/signal"
 	"strings"
 	"time"
 
@@ -37,14 +36,15 @@ func (me *MatchingEngine) SetMetrics(metrics *EngineMetrics) {
 	me.metrics = metrics
 }
 
-func (me *MatchingEngine) Start() {
+func (me *MatchingEngine) Start(ctx context.Context) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	orderMessages, errors := me.kafkaClient.ConsumerMessagesChan(me.quoteTopic)
 
 	tradeProducer := me.kafkaClient.GetProducer()
 	pricePointProducer := me.kafkaClient.GetProducer()
-
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, os.Interrupt)
 
 	consumedCount := 0
 	producedCount := 0
@@ -77,10 +77,10 @@ func (me *MatchingEngine) Start() {
 						me.metrics.ProducedMessagesCounter.Inc()
 					}
 				}
-			case <-signals:
+			case <-ctx.Done():
 				fmt.Println("INFO: interrupt is detected... closing trade producer...")
 				(*tradeProducer).Close()
-				tradeChannel <- Trade{}
+				return
 			}
 		}
 	}(tradeChannel)
@@ -107,10 +107,10 @@ func (me *MatchingEngine) Start() {
 						me.metrics.ProducedMessagesCounter.Inc()
 					}
 				}
-			case <-signals:
+			case <-ctx.Done():
 				fmt.Println("INFO: interrupt is detected... closing price point producer...")
 				(*pricePointProducer).Close()
-				pricePointChannel <- PricePoint{}
+				return
 			}
 		}
 	}(pricePointChannel)
@@ -133,7 +133,7 @@ func (me *MatchingEngine) Start() {
 					fmt.Printf("INFO: produced midprice every 1s: %.2f\n", midPrice)
 					pricePointChannel <- createPricePoint(midPrice)
 				}
-			case <-signals:
+			case <-ctx.Done():
 				fmt.Println("INFO: interrupt is detected... Closing quote midprice...")
 				return
 			}
@@ -163,9 +163,10 @@ func (me *MatchingEngine) Start() {
 				consumedCount++
 				fmt.Println("ERROR: received consumerError:", string(consumerError.Topic), string(consumerError.Partition), consumerError.Err)
 				orderChannel <- []byte{}
-			case <-signals:
+			case <-ctx.Done():
 				fmt.Println("INFO: interrupt is detected... Closing quote consummer...")
 				orderChannel <- []byte{}
+				return
 			}
 		}
 	}()
@@ -235,7 +236,11 @@ func (me *MatchingEngine) Process(inOrder *Order, producerChannel chan<- Trade, 
 		oppositeBestPriceQueue := (*oppositeBook)[oppositeBestPrice.Peak().(float64)]
 		// loop on nest price queue
 		for inOrder.Quantity > 0 && len(*oppositeBestPriceQueue) > 0 {
-			outOrder, _ := cut(0, oppositeBestPriceQueue)
+			outOrder, err := cut(0, oppositeBestPriceQueue)
+			if err != nil {
+				break
+			}
+			me.orderBook.decrementOpenOrderCount()
 			tradeQuantity := Min(inOrder.Quantity, outOrder.Quantity)
 			price := outOrder.Price
 			tradeId := uuid.New().String()
@@ -302,25 +307,5 @@ func (me *MatchingEngine) updateOrderbookGauges() {
 	me.metrics.BestAskGauge.Set(bestAsk)
 	me.metrics.MidPriceGauge.Set(midPrice)
 	me.metrics.SpreadGauge.Set(spread)
-	me.metrics.OpenOrderCountGauge.Set(float64(me.openOrderCount()))
-}
-
-func (me *MatchingEngine) openOrderCount() int {
-	if me.orderBook == nil {
-		return 0
-	}
-
-	count := 0
-	for _, orders := range me.orderBook.PriceToBuyOrders {
-		if orders != nil {
-			count += len(*orders)
-		}
-	}
-	for _, orders := range me.orderBook.PriceToSellOrders {
-		if orders != nil {
-			count += len(*orders)
-		}
-	}
-
-	return count
+	me.metrics.OpenOrderCountGauge.Set(float64(me.orderBook.OpenOrderCount()))
 }
