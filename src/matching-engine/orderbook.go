@@ -65,6 +65,7 @@ type Orderbook struct {
 	BestBid       *MaxHeap
 	BestAsk       *MinHeap
 	PriceToVolume map[float64]float64
+	openOrderCount int
 	// indexes + containers
 	PriceToBuyOrders  map[float64]*[]*Order
 	PriceToSellOrders map[float64]*[]*Order
@@ -94,6 +95,7 @@ func (o *Orderbook) AddOrder(order *Order, orderAction string) {
 			heap.Push(o.BestBid, price)
 			o.PriceToBuyOrders[price] = &[]*Order{order}
 		}
+		o.openOrderCount++
 	}
 	if orderAction == "SELL" {
 		val, ok := o.PriceToSellOrders[price]
@@ -103,5 +105,23 @@ func (o *Orderbook) AddOrder(order *Order, orderAction string) {
 			heap.Push(o.BestAsk, price)
 			o.PriceToSellOrders[price] = &[]*Order{order}
 		}
+		o.openOrderCount++
 	}
+}
+
+func (o *Orderbook) decrementOpenOrderCount() {
+	if o == nil {
+		return
+	}
+	if o.openOrderCount > 0 {
+		o.openOrderCount--
+	}
+}
+
+func (o *Orderbook) OpenOrderCount() int {
+	if o == nil {
+		return 0
+	}
+
+	return o.openOrderCount
 }

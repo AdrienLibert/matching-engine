@@ -218,7 +218,11 @@ func (me *MatchingEngine) Process(inOrder *Order, producerChannel chan<- Trade, 
 		oppositeBestPriceQueue := (*oppositeBook)[oppositeBestPrice.Peak().(float64)]
 		// loop on nest price queue
 		for inOrder.Quantity > 0 && len(*oppositeBestPriceQueue) > 0 {
-			outOrder, _ := cut(0, oppositeBestPriceQueue)
+			outOrder, err := cut(0, oppositeBestPriceQueue)
+			if err != nil {
+				break
+			}
+			me.orderBook.decrementOpenOrderCount()
 			tradeQuantity := Min(inOrder.Quantity, outOrder.Quantity)
 			price := outOrder.Price
 			tradeId := uuid.New().String()
@@ -285,25 +289,5 @@ func (me *MatchingEngine) updateOrderbookGauges() {
 	me.metrics.BestAskGauge.Set(bestAsk)
 	me.metrics.MidPriceGauge.Set(midPrice)
 	me.metrics.SpreadGauge.Set(spread)
-	me.metrics.OpenOrderCountGauge.Set(float64(me.openOrderCount()))
-}
-
-func (me *MatchingEngine) openOrderCount() int {
-	if me.orderBook == nil {
-		return 0
-	}
-
-	count := 0
-	for _, orders := range me.orderBook.PriceToBuyOrders {
-		if orders != nil {
-			count += len(*orders)
-		}
-	}
-	for _, orders := range me.orderBook.PriceToSellOrders {
-		if orders != nil {
-			count += len(*orders)
-		}
-	}
-
-	return count
+	me.metrics.OpenOrderCountGauge.Set(float64(me.orderBook.OpenOrderCount()))
 }
