@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"github.com/IBM/sarama"
 )
 
@@ -90,14 +91,7 @@ func (kc *KafkaClient) Assign(master sarama.Consumer, topic string) (chan *saram
 	}
 	fmt.Println("DEBUG: topics: ", topics)
 
-	foundTopic := false
-	for _, t := range topics {
-		if t == topic {
-			foundTopic = true
-			break
-		}
-	}
-	if !foundTopic {
+	if !slices.Contains(topics, topic) {
 		errors <- &sarama.ConsumerError{Topic: topic, Err: fmt.Errorf("topic %s not found", topic)}
 		close(consumers)
 		close(errors)
