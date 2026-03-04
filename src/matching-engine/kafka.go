@@ -75,8 +75,10 @@ func (kc *KafkaClient) GetProducer() *sarama.SyncProducer {
 func (kc *KafkaClient) ConsumerMessagesChan(topic string) (chan *sarama.ConsumerMessage, chan *sarama.ConsumerError) {
 	consumers := make(chan *sarama.ConsumerMessage)
 	errors := make(chan *sarama.ConsumerError, 1)
+	logger := logWithMethod("kafka.consume.setup")
 
 	emitSetupError := func(err error) {
+		logger.Error("kafka consumer setup failed", "topic", topic, "error", err)
 		errors <- &sarama.ConsumerError{Topic: topic, Partition: -1, Err: err}
 		close(consumers)
 		close(errors)
@@ -103,7 +105,7 @@ func (kc *KafkaClient) ConsumerMessagesChan(topic string) (chan *sarama.Consumer
 		return consumers, errors
 	}
 
-	fmt.Println("DEBUG: topics: ", topics)
+	logger.Debug("kafka topics discovered", "topics", topics)
 	consumer, err := kc.adminClient.ConsumePartition(
 		topic,
 		partitions[0], // TODO: only first partition for now
@@ -113,9 +115,10 @@ func (kc *KafkaClient) ConsumerMessagesChan(topic string) (chan *sarama.Consumer
 		emitSetupError(fmt.Errorf("failed to consume topic %s partition %d: %w", topic, partitions[0], err))
 		return consumers, errors
 	}
-	fmt.Println("INFO: start consuming topic: ", topic)
+	logger.Info("kafka consumer subscribed", "topic", topic, "partition", partitions[0])
 
 	go func(topic string, consumer sarama.PartitionConsumer) {
+		consumeLogger := logWithMethod("kafka.consume.stream")
 		for {
 			select {
 			case consumerError, ok := <-consumer.Errors():
@@ -123,7 +126,7 @@ func (kc *KafkaClient) ConsumerMessagesChan(topic string) (chan *sarama.Consumer
 					return
 				}
 				errors <- consumerError
-				fmt.Println("ERROR: not able to consume: ", consumerError.Err)
+				consumeLogger.Error("kafka consumer stream error", "topic", topic, "partition", consumerError.Partition, "error", consumerError.Err)
 			case msg, ok := <-consumer.Messages():
 				if !ok {
 					return

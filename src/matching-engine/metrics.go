@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"log"
 	"net/http"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -131,9 +130,10 @@ func StartMetricsServer(address string, path string, metrics *EngineMetrics) *ht
 	}
 
 	go func() {
-		log.Printf("INFO: metrics server listening on %s%s", address, path)
+		logger := logWithMethod("metrics.server")
+		logger.Info("metrics server listening", "address", address, "path", path)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Printf("ERROR: metrics server failed: %v", err)
+			logger.Error("metrics server failed", "address", address, "path", path, "error", err)
 		}
 	}()
 

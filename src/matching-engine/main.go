@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -22,7 +20,7 @@ func getenv(key, fallback string) string {
 }
 
 func main() {
-	fmt.Println("INFO: starting orderbook")
+	logWithMethod("service.lifecycle").Info("matching engine starting")
 	metrics := NewEngineMetrics()
 	metricsAddress := getenv("METRICS_ADDRESS", ":2112")
 	metricsPath := getenv("METRICS_PATH", "/metrics")
@@ -42,6 +40,7 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	if err := metricsServer.Shutdown(shutdownCtx); err != nil {
-		log.Printf("ERROR: metrics server shutdown failed: %v", err)
+		logWithMethod("metrics.server.shutdown").Error("metrics server shutdown failed", "error", err)
 	}
+	logWithMethod("service.lifecycle").Info("matching engine stopped")
 }
