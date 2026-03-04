@@ -30,7 +30,7 @@ func Start(numTraders int, kc *KafkaClient) {
 			}
 			producerMessage := sarama.ProducerMessage{
 				Topic: kc.quoteTopic,
-				Value: sarama.StringEncoder(convertOrderToMessage(order)),
+				Value: sarama.ByteEncoder(convertOrderToMessage(order)),
 			}
 			_, _, err := (*orderProducer).SendMessage(&producerMessage)
 			if err != nil {

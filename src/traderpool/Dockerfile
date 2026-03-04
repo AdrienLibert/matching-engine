@@ -1,9 +1,10 @@
 FROM golang:1.23.4
 
 WORKDIR /app
-COPY go.mod go.sum ./
-RUN go mod tidy
-COPY . /app
+COPY src/protocol /app/src/protocol
+COPY src/traderpool /app/src/traderpool
+
+WORKDIR /app/src/traderpool
 
 RUN go build -o main .
 

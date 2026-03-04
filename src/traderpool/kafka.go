@@ -1,10 +1,12 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
+	"orderbookpb/contracts"
 	"slices"
+
 	"github.com/IBM/sarama"
+	"google.golang.org/protobuf/proto"
 )
 
 type KafkaClient struct {
@@ -143,28 +145,67 @@ func (kc *KafkaClient) Assign(master sarama.Consumer, topic string) (chan *saram
 }
 
 func handleError(err error) {
-	fmt.Println("ERROR: invalid message consummed:", err)
+	fmt.Println("ERROR: invalid message consumed:", err)
 }
 
 func convertOrderToMessage(order Order) []byte {
-	message, err := json.Marshal(order)
+	message, err := proto.Marshal(toProtoOrder(order))
 	if err != nil {
-		fmt.Println("ERROR: invalid order being converted to message:", err)
+		fmt.Println("ERROR: invalid order being converted to protobuf message:", err)
 	}
 	return message
 }
 
 func convertMessageToTrade(messageValue []byte) (Trade, error) {
-	var trade = &Trade{}
-	if err := json.Unmarshal(messageValue, trade); err != nil {
+	var wireTrade contracts.Trade
+	if err := proto.Unmarshal(messageValue, &wireTrade); err != nil {
 		return Trade{}, err
 	}
 
-	return *trade, nil
+	return tradeFromProto(&wireTrade), nil
 }
 
 func convertMessageToPricePoint(value []byte) (PricePoint, error) {
-	var pp PricePoint
-	err := json.Unmarshal(value, &pp)
-	return pp, err
+	var wirePricePoint contracts.PricePoint
+	err := proto.Unmarshal(value, &wirePricePoint)
+	if err != nil {
+		return PricePoint{}, err
+	}
+
+	return pricePointFromProto(&wirePricePoint), nil
+}
+
+func toProtoOrder(order Order) *contracts.Order {
+	return &contracts.Order{
+		OrderId:   order.OrderID,
+		OrderType: order.OrderType,
+		Price:     order.Price,
+		Quantity:  order.Quantity,
+		Action:    order.Action,
+		Timestamp: order.Timestamp,
+	}
+}
+
+func tradeFromProto(trade *contracts.Trade) Trade {
+	if trade == nil {
+		return Trade{}
+	}
+
+	return Trade{
+		TradeId:   trade.TradeId,
+		OrderId:   trade.OrderId,
+		Quantity:  trade.Quantity,
+		Price:     trade.Price,
+		Action:    trade.Action,
+		Status:    trade.Status,
+		Timestamp: trade.Timestamp,
+	}
+}
+
+func pricePointFromProto(pricePoint *contracts.PricePoint) PricePoint {
+	if pricePoint == nil {
+		return PricePoint{}
+	}
+
+	return PricePoint{Price: pricePoint.Price}
 }

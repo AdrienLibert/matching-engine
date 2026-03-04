@@ -1,15 +1,16 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"math"
+	"orderbookpb/contracts"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/IBM/sarama"
+	"google.golang.org/protobuf/proto"
 )
 
 type fakeConsumer struct {
@@ -115,12 +116,17 @@ func TestConvertOrderToMessageRoundTrip(t *testing.T) {
 
 	raw := convertOrderToMessage(order)
 
-	var got Order
-	if err := json.Unmarshal(raw, &got); err != nil {
-		t.Fatalf("expected valid json order message, got error: %v", err)
+	var got contracts.Order
+	if err := proto.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("expected valid protobuf order message, got error: %v", err)
 	}
 
-	if got != order {
+	if got.OrderId != order.OrderID ||
+		got.OrderType != order.OrderType ||
+		got.Price != order.Price ||
+		got.Quantity != order.Quantity ||
+		got.Action != order.Action ||
+		got.Timestamp != order.Timestamp {
 		t.Fatalf("round-trip mismatch, got %+v want %+v", got, order)
 	}
 }
@@ -134,7 +140,21 @@ func TestConvertMessageToTradeScenarios(t *testing.T) {
 	}{
 		{
 			name:    "valid trade payload",
-			payload: []byte(`{"trade_id":"t1","order_id":"o1","quantity":5,"price":101.1,"action":"BUY","status":"FILLED","timestamp":9}`),
+			payload: func() []byte {
+				msg, err := proto.Marshal(&contracts.Trade{
+					TradeId:   "t1",
+					OrderId:   "o1",
+					Quantity:  5,
+					Price:     101.1,
+					Action:    "BUY",
+					Status:    "FILLED",
+					Timestamp: 9,
+				})
+				if err != nil {
+					t.Fatalf("failed to marshal protobuf trade message: %v", err)
+				}
+				return msg
+			}(),
 			assertion: func(t *testing.T, trade Trade) {
 				t.Helper()
 				if trade.TradeId != "t1" || trade.OrderId != "o1" || trade.Quantity != 5 || math.Abs(trade.Price-101.1) > 1e-9 || trade.Action != "BUY" || trade.Status != "FILLED" || trade.Timestamp != 9 {
@@ -143,7 +163,7 @@ func TestConvertMessageToTradeScenarios(t *testing.T) {
 			},
 		},
 		{
-			name:    "invalid trade json",
+			name:    "invalid trade protobuf",
 			payload: []byte(`{"trade_id":"broken"`),
 			wantErr: true,
 		},
@@ -175,7 +195,13 @@ func TestConvertMessageToPricePointScenarios(t *testing.T) {
 		wantErr bool
 		want    float64
 	}{
-		{name: "valid price point", payload: []byte(`{"price":49.75}`), want: 49.75},
+		{name: "valid price point", payload: func() []byte {
+			msg, err := proto.Marshal(&contracts.PricePoint{Price: 49.75})
+			if err != nil {
+				t.Fatalf("failed to marshal protobuf price point message: %v", err)
+			}
+			return msg
+		}(), want: 49.75},
 		{name: "invalid price point", payload: []byte(`{"price":`), wantErr: true},
 	}
 

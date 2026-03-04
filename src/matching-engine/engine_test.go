@@ -64,10 +64,10 @@ func TestMatchingEngineProcessScenarios(t *testing.T) {
 		{
 			name: "no-match",
 			setup: []Order{
-				{OrderID: "resting-sell-1", OrderType: "limit", Price: 12.0, Quantity: -5, Timestamp: now},
-				{OrderID: "resting-sell-2", OrderType: "limit", Price: 12.0, Quantity: -3, Timestamp: now},
+				{OrderID: "resting-sell-1", OrderType: "limit", Price: 12.0, Quantity: 5, Action: "SELL", Timestamp: now},
+				{OrderID: "resting-sell-2", OrderType: "limit", Price: 12.0, Quantity: 3, Action: "SELL", Timestamp: now},
 			},
-			incoming: Order{OrderID: "incoming-buy", OrderType: "limit", Price: 11.0, Quantity: 5, Timestamp: now},
+			incoming: Order{OrderID: "incoming-buy", OrderType: "limit", Price: 11.0, Quantity: 5, Action: "BUY", Timestamp: now},
 			assertFn: func(t *testing.T, orderbook *Orderbook) {
 				assert.Equal(t, 1, orderbook.BestBid.Len())
 				assert.Equal(t, 11.0, orderbook.BestBid.Peak())
@@ -83,9 +83,9 @@ func TestMatchingEngineProcessScenarios(t *testing.T) {
 		{
 			name: "full-fill",
 			setup: []Order{
-				{OrderID: "resting-sell", OrderType: "limit", Price: 11.0, Quantity: -7, Timestamp: now},
+				{OrderID: "resting-sell", OrderType: "limit", Price: 11.0, Quantity: 7, Action: "SELL", Timestamp: now},
 			},
-			incoming: Order{OrderID: "incoming-buy", OrderType: "limit", Price: 11.0, Quantity: 7, Timestamp: now},
+			incoming: Order{OrderID: "incoming-buy", OrderType: "limit", Price: 11.0, Quantity: 7, Action: "BUY", Timestamp: now},
 			assertFn: func(t *testing.T, orderbook *Orderbook) {
 				assert.Equal(t, 0, orderbook.BestBid.Len())
 				assert.Equal(t, nil, orderbook.BestBid.Peak())
@@ -99,10 +99,10 @@ func TestMatchingEngineProcessScenarios(t *testing.T) {
 		{
 			name: "partial-fill",
 			setup: []Order{
-				{OrderID: "resting-sell-1", OrderType: "limit", Price: 11.0, Quantity: -10, Timestamp: now},
-				{OrderID: "resting-sell-2", OrderType: "limit", Price: 11.0, Quantity: -2, Timestamp: now},
+				{OrderID: "resting-sell-1", OrderType: "limit", Price: 11.0, Quantity: 10, Action: "SELL", Timestamp: now},
+				{OrderID: "resting-sell-2", OrderType: "limit", Price: 11.0, Quantity: 2, Action: "SELL", Timestamp: now},
 			},
-			incoming: Order{OrderID: "incoming-buy", OrderType: "limit", Price: 11.0, Quantity: 4, Timestamp: now},
+			incoming: Order{OrderID: "incoming-buy", OrderType: "limit", Price: 11.0, Quantity: 4, Action: "BUY", Timestamp: now},
 			assertFn: func(t *testing.T, orderbook *Orderbook) {
 				assert.Equal(t, 0, orderbook.BestBid.Len())
 				assert.Equal(t, nil, orderbook.BestBid.Peak())
@@ -117,12 +117,12 @@ func TestMatchingEngineProcessScenarios(t *testing.T) {
 		{
 			name: "multi-level-sweep",
 			setup: []Order{
-				{OrderID: "sell-l1a", OrderType: "limit", Price: 10.0, Quantity: -3, Timestamp: now},
-				{OrderID: "sell-l1b", OrderType: "limit", Price: 10.0, Quantity: -2, Timestamp: now},
-				{OrderID: "sell-l2", OrderType: "limit", Price: 11.0, Quantity: -4, Timestamp: now},
-				{OrderID: "sell-l3", OrderType: "limit", Price: 12.0, Quantity: -8, Timestamp: now},
+				{OrderID: "sell-l1a", OrderType: "limit", Price: 10.0, Quantity: 3, Action: "SELL", Timestamp: now},
+				{OrderID: "sell-l1b", OrderType: "limit", Price: 10.0, Quantity: 2, Action: "SELL", Timestamp: now},
+				{OrderID: "sell-l2", OrderType: "limit", Price: 11.0, Quantity: 4, Action: "SELL", Timestamp: now},
+				{OrderID: "sell-l3", OrderType: "limit", Price: 12.0, Quantity: 8, Action: "SELL", Timestamp: now},
 			},
-			incoming: Order{OrderID: "incoming-buy", OrderType: "limit", Price: 11.0, Quantity: 10, Timestamp: now},
+			incoming: Order{OrderID: "incoming-buy", OrderType: "limit", Price: 11.0, Quantity: 10, Action: "BUY", Timestamp: now},
 			assertFn: func(t *testing.T, orderbook *Orderbook) {
 				assert.Equal(t, 1, orderbook.BestBid.Len())
 				assert.Equal(t, 11.0, orderbook.BestBid.Peak())
@@ -177,13 +177,13 @@ func TestMatchingEngineProcessFIFOAndTradeOrderBuyAgainstSamePriceSells(t *testi
 		matchingEngine := NewMatchingEngine(nil, orderbook)
 		now := time.Now().UTC().Unix()
 
-		restingSell1 := Order{OrderID: "sell-1", OrderType: "limit", Price: 10.0, Quantity: -2, Timestamp: now}
-		restingSell2 := Order{OrderID: "sell-2", OrderType: "limit", Price: 10.0, Quantity: -3, Timestamp: now}
+		restingSell1 := Order{OrderID: "sell-1", OrderType: "limit", Price: 10.0, Quantity: 2, Action: "SELL", Timestamp: now}
+		restingSell2 := Order{OrderID: "sell-2", OrderType: "limit", Price: 10.0, Quantity: 3, Action: "SELL", Timestamp: now}
 		matchingEngine.Process(&restingSell1, nil, nil)
 		matchingEngine.Process(&restingSell2, nil, nil)
 
 		tradeChannel := make(chan Trade, 8)
-		incomingBuy := Order{OrderID: "buy-in", OrderType: "limit", Price: 10.0, Quantity: 5, Timestamp: now}
+		incomingBuy := Order{OrderID: "buy-in", OrderType: "limit", Price: 10.0, Quantity: 5, Action: "BUY", Timestamp: now}
 		matchingEngine.Process(&incomingBuy, tradeChannel, nil)
 
 		trades := collectTrades(tradeChannel, 4)
@@ -210,13 +210,13 @@ func TestMatchingEngineProcessFIFOAndTradeOrderSellAgainstSamePriceBuys(t *testi
 		matchingEngine := NewMatchingEngine(nil, orderbook)
 		now := time.Now().UTC().Unix()
 
-		restingBuy1 := Order{OrderID: "buy-1", OrderType: "limit", Price: 10.0, Quantity: 2, Timestamp: now}
-		restingBuy2 := Order{OrderID: "buy-2", OrderType: "limit", Price: 10.0, Quantity: 3, Timestamp: now}
+		restingBuy1 := Order{OrderID: "buy-1", OrderType: "limit", Price: 10.0, Quantity: 2, Action: "BUY", Timestamp: now}
+		restingBuy2 := Order{OrderID: "buy-2", OrderType: "limit", Price: 10.0, Quantity: 3, Action: "BUY", Timestamp: now}
 		matchingEngine.Process(&restingBuy1, nil, nil)
 		matchingEngine.Process(&restingBuy2, nil, nil)
 
 		tradeChannel := make(chan Trade, 8)
-		incomingSell := Order{OrderID: "sell-in", OrderType: "limit", Price: 10.0, Quantity: -5, Timestamp: now}
+		incomingSell := Order{OrderID: "sell-in", OrderType: "limit", Price: 10.0, Quantity: 5, Action: "SELL", Timestamp: now}
 		matchingEngine.Process(&incomingSell, tradeChannel, nil)
 
 		trades := collectTrades(tradeChannel, 4)
@@ -242,16 +242,16 @@ func TestMatchingEngineProcessEventFieldsBuyFlow(t *testing.T) {
 	matchingEngine := NewMatchingEngine(nil, orderbook)
 	now := time.Now().UTC().Unix()
 
-	restingSell1 := Order{OrderID: "sell-1", OrderType: "limit", Price: 10.0, Quantity: -2, Timestamp: now}
-	restingSell2 := Order{OrderID: "sell-2", OrderType: "limit", Price: 10.0, Quantity: -3, Timestamp: now}
-	restingSell3 := Order{OrderID: "sell-3", OrderType: "limit", Price: 11.0, Quantity: -4, Timestamp: now}
+	restingSell1 := Order{OrderID: "sell-1", OrderType: "limit", Price: 10.0, Quantity: 2, Action: "SELL", Timestamp: now}
+	restingSell2 := Order{OrderID: "sell-2", OrderType: "limit", Price: 10.0, Quantity: 3, Action: "SELL", Timestamp: now}
+	restingSell3 := Order{OrderID: "sell-3", OrderType: "limit", Price: 11.0, Quantity: 4, Action: "SELL", Timestamp: now}
 	matchingEngine.Process(&restingSell1, nil, nil)
 	matchingEngine.Process(&restingSell2, nil, nil)
 	matchingEngine.Process(&restingSell3, nil, nil)
 
 	tradeChannel := make(chan Trade, 12)
 	pricePointChannel := make(chan PricePoint, 12)
-	incomingBuy := Order{OrderID: "buy-in", OrderType: "limit", Price: 11.0, Quantity: 7, Timestamp: now}
+	incomingBuy := Order{OrderID: "buy-in", OrderType: "limit", Price: 11.0, Quantity: 7, Action: "BUY", Timestamp: now}
 	matchingEngine.Process(&incomingBuy, tradeChannel, pricePointChannel)
 
 	trades := collectTrades(tradeChannel, 6)
@@ -287,14 +287,14 @@ func TestMatchingEngineProcessEventFieldsSellFlow(t *testing.T) {
 	matchingEngine := NewMatchingEngine(nil, orderbook)
 	now := time.Now().UTC().Unix()
 
-	restingBuy1 := Order{OrderID: "buy-1", OrderType: "limit", Price: 11.0, Quantity: 3, Timestamp: now}
-	restingBuy2 := Order{OrderID: "buy-2", OrderType: "limit", Price: 10.0, Quantity: 4, Timestamp: now}
+	restingBuy1 := Order{OrderID: "buy-1", OrderType: "limit", Price: 11.0, Quantity: 3, Action: "BUY", Timestamp: now}
+	restingBuy2 := Order{OrderID: "buy-2", OrderType: "limit", Price: 10.0, Quantity: 4, Action: "BUY", Timestamp: now}
 	matchingEngine.Process(&restingBuy1, nil, nil)
 	matchingEngine.Process(&restingBuy2, nil, nil)
 
 	tradeChannel := make(chan Trade, 12)
 	pricePointChannel := make(chan PricePoint, 12)
-	incomingSell := Order{OrderID: "sell-in", OrderType: "limit", Price: 10.0, Quantity: -5, Timestamp: now}
+	incomingSell := Order{OrderID: "sell-in", OrderType: "limit", Price: 10.0, Quantity: 5, Action: "SELL", Timestamp: now}
 	matchingEngine.Process(&incomingSell, tradeChannel, pricePointChannel)
 
 	trades := collectTrades(tradeChannel, 4)
@@ -330,13 +330,13 @@ func TestMatchingEngineOpenOrderCountRemainsO1AndAccurate(t *testing.T) {
 	matchingEngine := NewMatchingEngine(nil, orderbook)
 	now := time.Now().UTC().Unix()
 
-	restingSell1 := Order{OrderID: "sell-1", OrderType: "limit", Price: 10.0, Quantity: -5, Timestamp: now}
-	restingSell2 := Order{OrderID: "sell-2", OrderType: "limit", Price: 10.0, Quantity: -3, Timestamp: now}
+	restingSell1 := Order{OrderID: "sell-1", OrderType: "limit", Price: 10.0, Quantity: 5, Action: "SELL", Timestamp: now}
+	restingSell2 := Order{OrderID: "sell-2", OrderType: "limit", Price: 10.0, Quantity: 3, Action: "SELL", Timestamp: now}
 	matchingEngine.Process(&restingSell1, nil, nil)
 	matchingEngine.Process(&restingSell2, nil, nil)
 	assert.Equal(t, 2, orderbook.OpenOrderCount())
 
-	incomingBuy := Order{OrderID: "buy-in", OrderType: "limit", Price: 10.0, Quantity: 6, Timestamp: now}
+	incomingBuy := Order{OrderID: "buy-in", OrderType: "limit", Price: 10.0, Quantity: 6, Action: "BUY", Timestamp: now}
 	matchingEngine.Process(&incomingBuy, nil, nil)
 
 	assert.Equal(t, 1, orderbook.OpenOrderCount())

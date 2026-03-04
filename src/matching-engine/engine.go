@@ -3,6 +3,7 @@ package main
 import (
 	"container/heap"
 	"context"
+	"fmt"
 	"math"
 	"strings"
 	"sync/atomic"
@@ -58,7 +59,7 @@ func (me *MatchingEngine) Start(ctx context.Context) {
 				if !ok {
 					return
 				}
-				producerMessage := sarama.ProducerMessage{Topic: me.tradeTopic, Value: sarama.StringEncoder(trade.toJSON())}
+				producerMessage := sarama.ProducerMessage{Topic: me.tradeTopic, Value: sarama.ByteEncoder(trade.toMessage())}
 				par, off, err := (*tradeProducer).SendMessage(&producerMessage)
 				if err != nil {
 					logger.Error("trade produce failed", "topic", me.tradeTopic, "partition", par, "offset", off, "error", err, "order_id", trade.OrderId, "correlation_id", trade.TradeId)
@@ -86,12 +87,12 @@ func (me *MatchingEngine) Start(ctx context.Context) {
 				if !ok {
 					return
 				}
-				producerMessage := sarama.ProducerMessage{Topic: me.pricePointTopic, Value: sarama.StringEncoder(pricePoint.toJSON())}
+				producerMessage := sarama.ProducerMessage{Topic: me.pricePointTopic, Value: sarama.ByteEncoder(pricePoint.toMessage())}
 				par, off, err := (*pricePointProducer).SendMessage(&producerMessage)
 				if err != nil {
 					logger.Error("price point produce failed", "topic", me.pricePointTopic, "partition", par, "offset", off, "error", err)
 				} else {
-					logger.Info("price point produced", "topic", me.pricePointTopic, "partition", par, "offset", off, "price", pricePoint.Price)
+					fmt.Println("INFO: produced price point:", producerMessage)
 					producedCount.Add(1)
 					if me.metrics != nil {
 						me.metrics.ProducedMessagesCounter.Inc()
@@ -217,19 +218,6 @@ func (me *MatchingEngine) Process(inOrder *Order, producerChannel chan<- Trade, 
 		if inOrder.Quantity < 0 {
 			inOrder.Quantity = -inOrder.Quantity
 		}
-		comparator = func(x, y float64) bool { return x <= y }
-	} else if inOrder.Quantity > 0 {
-		oppositeBook = &me.orderBook.PriceToSellOrders
-		oppositeBestPrice = me.orderBook.BestAsk
-		inAction = "BUY"
-		outAction = "SELL"
-		comparator = func(x, y float64) bool { return x >= y }
-	} else {
-		oppositeBook = &me.orderBook.PriceToBuyOrders
-		oppositeBestPrice = me.orderBook.BestBid
-		inAction = "SELL"
-		outAction = "BUY"
-		inOrder.Quantity = -inOrder.Quantity
 		comparator = func(x, y float64) bool { return x <= y }
 	}
 

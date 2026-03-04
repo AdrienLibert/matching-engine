@@ -1,9 +1,11 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
+	"orderbookpb/contracts"
 	"strings"
+
+	"google.golang.org/protobuf/proto"
 )
 
 type Order struct {
@@ -29,16 +31,16 @@ type PricePoint struct {
 	Price float64 `json:"price"`
 }
 
-func (trade Trade) toJSON() []byte {
-	message, err := json.Marshal(trade)
+func (trade Trade) toMessage() []byte {
+	message, err := proto.Marshal(tradeToProto(trade))
 	if err != nil {
 		logWithMethod("matching.model.trade_json").Error("trade serialization failed", "order_id", trade.OrderId, "correlation_id", trade.TradeId, "error", err)
 	}
 	return message
 }
 
-func (pricePoint PricePoint) toJSON() []byte {
-	message, err := json.Marshal(pricePoint)
+func (pricePoint PricePoint) toMessage() []byte {
+	message, err := proto.Marshal(pricePointToProto(pricePoint))
 	if err != nil {
 		logWithMethod("matching.model.price_point_json").Error("price point serialization failed", "price", pricePoint.Price, "error", err)
 	}
@@ -46,10 +48,12 @@ func (pricePoint PricePoint) toJSON() []byte {
 }
 
 func messageToOrder(messageValue []byte) (Order, error) {
-	var order = &Order{}
-	if err := json.Unmarshal(messageValue, order); err != nil {
+	var wireOrder contracts.Order
+	if err := proto.Unmarshal(messageValue, &wireOrder); err != nil {
 		return Order{}, err
 	}
+
+	order := fromProtoOrder(&wireOrder)
 
 	if order.Quantity <= 0 {
 		return Order{}, fmt.Errorf("invalid order quantity: must be > 0")
@@ -60,7 +64,38 @@ func messageToOrder(messageValue []byte) (Order, error) {
 		return Order{}, fmt.Errorf("invalid order action: %s", order.Action)
 	}
 
-	return *order, nil
+	return order, nil
+}
+
+func fromProtoOrder(order *contracts.Order) Order {
+	if order == nil {
+		return Order{}
+	}
+
+	return Order{
+		OrderID:   order.OrderId,
+		OrderType: order.OrderType,
+		Price:     order.Price,
+		Quantity:  order.Quantity,
+		Action:    order.Action,
+		Timestamp: order.Timestamp,
+	}
+}
+
+func tradeToProto(trade Trade) *contracts.Trade {
+	return &contracts.Trade{
+		TradeId:   trade.TradeId,
+		OrderId:   trade.OrderId,
+		Quantity:  trade.Quantity,
+		Price:     trade.Price,
+		Action:    trade.Action,
+		Status:    trade.Status,
+		Timestamp: trade.Timestamp,
+	}
+}
+
+func pricePointToProto(pricePoint PricePoint) *contracts.PricePoint {
+	return &contracts.PricePoint{Price: pricePoint.Price}
 }
 
 func createTrade(tradeId string, inOrder *Order, tradeQuantity int64, price float64, action string, ts int64) Trade {
