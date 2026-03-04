@@ -145,7 +145,7 @@ func (kc *KafkaClient) Assign(master sarama.Consumer, topic string) (chan *saram
 }
 
 func handleError(err error) {
-	fmt.Println("ERROR: invalid message consummed:", err)
+	fmt.Println("ERROR: invalid message consumed:", err)
 }
 
 func convertOrderToMessage(order Order) []byte {

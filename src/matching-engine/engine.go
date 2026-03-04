@@ -183,7 +183,7 @@ func (me *MatchingEngine) Start(ctx context.Context) {
 				fmt.Println("ERROR: received consumerError:", string(consumerError.Topic), string(consumerError.Partition), consumerError.Err)
 				orderChannel <- []byte{}
 			case <-ctx.Done():
-				fmt.Println("INFO: interrupt is detected... Closing quote consummer...")
+				fmt.Println("INFO: interrupt is detected... Closing quote consumer...")
 				orderChannel <- []byte{}
 				return
 			}
