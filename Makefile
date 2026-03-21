@@ -68,8 +68,8 @@ monitoring-prometheus:
 # 2. test matching-engine
 # 3. test traderbook
 test:
-	cd src/matching-engine/ && go test
-	cd src/traderpool/ && go test
+	cd src/matching-engine/ && go test -v
+	cd src/traderpool/ && go test -v
 
 ruff:
 	uv run ruff format . && uv run ruff check --fix
