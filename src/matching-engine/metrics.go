@@ -18,11 +18,20 @@ type EngineMetrics struct {
 	ProducedMessagesCounter     prometheus.Counter
 	BestBidGauge                prometheus.Gauge
 	BestAskGauge                prometheus.Gauge
+	BestBidQuantityGauge        prometheus.Gauge
+	BestAskQuantityGauge        prometheus.Gauge
 	MidPriceGauge               prometheus.Gauge
 	SpreadGauge                 prometheus.Gauge
+	SpreadBpsGauge              prometheus.Gauge
+	NearMidDepthQuantityGauge   *prometheus.GaugeVec
+	TwoSidedBookGauge           prometheus.Gauge
+	MidPriceJumpAbsGauge        prometheus.Gauge
 	OpenOrderCountGauge         prometheus.Gauge
+	SubmittedQuantityCounter    prometheus.Counter
+	ExecutedQuantityCounter     prometheus.Counter
 	ProcessDurationHistogram    prometheus.Histogram
 	PerOrderMatchCountHistogram prometheus.Histogram
+	TimeToFirstFillHistogram    prometheus.Histogram
 }
 
 func NewEngineMetrics() *EngineMetrics {
@@ -66,6 +75,18 @@ func NewEngineMetrics() *EngineMetrics {
 			Name:      "best_ask",
 			Help:      "Current best ask price",
 		}),
+		BestBidQuantityGauge: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: "orderbook",
+			Subsystem: "engine",
+			Name:      "best_bid_quantity",
+			Help:      "Current aggregate quantity at best bid price level",
+		}),
+		BestAskQuantityGauge: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: "orderbook",
+			Subsystem: "engine",
+			Name:      "best_ask_quantity",
+			Help:      "Current aggregate quantity at best ask price level",
+		}),
 		MidPriceGauge: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: "orderbook",
 			Subsystem: "engine",
@@ -78,11 +99,47 @@ func NewEngineMetrics() *EngineMetrics {
 			Name:      "spread",
 			Help:      "Current bid-ask spread",
 		}),
+		SpreadBpsGauge: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: "orderbook",
+			Subsystem: "engine",
+			Name:      "spread_bps",
+			Help:      "Current bid-ask spread in basis points",
+		}),
+		NearMidDepthQuantityGauge: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Namespace: "orderbook",
+			Subsystem: "engine",
+			Name:      "near_mid_depth_quantity",
+			Help:      "Aggregate resting quantity near mid-price by side and band",
+		}, []string{"side", "band_bps"}),
+		TwoSidedBookGauge: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: "orderbook",
+			Subsystem: "engine",
+			Name:      "two_sided_book",
+			Help:      "Whether both bid and ask are present (1=true, 0=false)",
+		}),
+		MidPriceJumpAbsGauge: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: "orderbook",
+			Subsystem: "engine",
+			Name:      "mid_price_jump_abs",
+			Help:      "Absolute jump in mid-price versus last observed valid mid-price",
+		}),
 		OpenOrderCountGauge: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: "orderbook",
 			Subsystem: "engine",
 			Name:      "open_order_count",
 			Help:      "Current number of open orders in the book",
+		}),
+		SubmittedQuantityCounter: prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: "orderbook",
+			Subsystem: "engine",
+			Name:      "submitted_quantity_total",
+			Help:      "Total accepted resting submitted quantity (maker-side denominator)",
+		}),
+		ExecutedQuantityCounter: prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: "orderbook",
+			Subsystem: "engine",
+			Name:      "executed_quantity_total",
+			Help:      "Total executed resting quantity (maker-side numerator)",
 		}),
 		ProcessDurationHistogram: prometheus.NewHistogram(prometheus.HistogramOpts{
 			Namespace: "orderbook",
@@ -98,6 +155,19 @@ func NewEngineMetrics() *EngineMetrics {
 			Help:      "Number of matches found per consumed order",
 			Buckets:   []float64{0, 1, 2, 3, 5, 8, 13, 21, 34},
 		}),
+		TimeToFirstFillHistogram: prometheus.NewHistogram(prometheus.HistogramOpts{
+			Namespace: "orderbook",
+			Subsystem: "engine",
+			Name:      "time_to_first_fill_seconds",
+			Help:      "Latency from accepted resting order ingest to first fill",
+			Buckets:   []float64{0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10},
+		}),
+	}
+
+	for _, side := range []string{"bid", "ask"} {
+		for _, bandBps := range []string{"25", "50", "100"} {
+			metrics.NearMidDepthQuantityGauge.WithLabelValues(side, bandBps).Set(0)
+		}
 	}
 
 	registry.MustRegister(
@@ -107,11 +177,20 @@ func NewEngineMetrics() *EngineMetrics {
 		metrics.ProducedMessagesCounter,
 		metrics.BestBidGauge,
 		metrics.BestAskGauge,
+		metrics.BestBidQuantityGauge,
+		metrics.BestAskQuantityGauge,
 		metrics.MidPriceGauge,
 		metrics.SpreadGauge,
+		metrics.SpreadBpsGauge,
+		metrics.NearMidDepthQuantityGauge,
+		metrics.TwoSidedBookGauge,
+		metrics.MidPriceJumpAbsGauge,
 		metrics.OpenOrderCountGauge,
+		metrics.SubmittedQuantityCounter,
+		metrics.ExecutedQuantityCounter,
 		metrics.ProcessDurationHistogram,
 		metrics.PerOrderMatchCountHistogram,
+		metrics.TimeToFirstFillHistogram,
 	)
 
 	return metrics

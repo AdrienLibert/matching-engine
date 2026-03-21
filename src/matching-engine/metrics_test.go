@@ -24,18 +24,27 @@ func TestNewEngineMetricsInitializesRegistryAndCollectors(t *testing.T) {
 	assert.NotNil(t, metrics.ProducedMessagesCounter)
 	assert.NotNil(t, metrics.BestBidGauge)
 	assert.NotNil(t, metrics.BestAskGauge)
+	assert.NotNil(t, metrics.BestBidQuantityGauge)
+	assert.NotNil(t, metrics.BestAskQuantityGauge)
 	assert.NotNil(t, metrics.MidPriceGauge)
 	assert.NotNil(t, metrics.SpreadGauge)
+	assert.NotNil(t, metrics.SpreadBpsGauge)
+	assert.NotNil(t, metrics.NearMidDepthQuantityGauge)
+	assert.NotNil(t, metrics.TwoSidedBookGauge)
+	assert.NotNil(t, metrics.MidPriceJumpAbsGauge)
 	assert.NotNil(t, metrics.OpenOrderCountGauge)
+	assert.NotNil(t, metrics.SubmittedQuantityCounter)
+	assert.NotNil(t, metrics.ExecutedQuantityCounter)
 	assert.NotNil(t, metrics.ProcessDurationHistogram)
 	assert.NotNil(t, metrics.PerOrderMatchCountHistogram)
+	assert.NotNil(t, metrics.TimeToFirstFillHistogram)
 
 	metricFamilies, err := metrics.registry.Gather()
 	if !assert.NoError(t, err) {
 		return
 	}
 
-	assert.Len(t, metricFamilies, 11)
+	assert.Len(t, metricFamilies, 20)
 
 	familyNames := make(map[string]bool, len(metricFamilies))
 	for _, family := range metricFamilies {
@@ -49,11 +58,20 @@ func TestNewEngineMetricsInitializesRegistryAndCollectors(t *testing.T) {
 		"orderbook_engine_produced_messages_total",
 		"orderbook_engine_best_bid",
 		"orderbook_engine_best_ask",
+		"orderbook_engine_best_bid_quantity",
+		"orderbook_engine_best_ask_quantity",
 		"orderbook_engine_mid_price",
 		"orderbook_engine_spread",
+		"orderbook_engine_spread_bps",
+		"orderbook_engine_near_mid_depth_quantity",
+		"orderbook_engine_two_sided_book",
+		"orderbook_engine_mid_price_jump_abs",
 		"orderbook_engine_open_order_count",
+		"orderbook_engine_submitted_quantity_total",
+		"orderbook_engine_executed_quantity_total",
 		"orderbook_engine_process_duration_seconds",
 		"orderbook_engine_per_order_match_count",
+		"orderbook_engine_time_to_first_fill_seconds",
 	}
 
 	for _, metricName := range expectedNames {
@@ -80,11 +98,20 @@ func TestEngineMetricsHandlerExposesPrometheusTextOutput(t *testing.T) {
 		"orderbook_engine_produced_messages_total",
 		"orderbook_engine_best_bid",
 		"orderbook_engine_best_ask",
+		"orderbook_engine_best_bid_quantity",
+		"orderbook_engine_best_ask_quantity",
 		"orderbook_engine_mid_price",
 		"orderbook_engine_spread",
+		"orderbook_engine_spread_bps",
+		"orderbook_engine_near_mid_depth_quantity",
+		"orderbook_engine_two_sided_book",
+		"orderbook_engine_mid_price_jump_abs",
 		"orderbook_engine_open_order_count",
+		"orderbook_engine_submitted_quantity_total",
+		"orderbook_engine_executed_quantity_total",
 		"orderbook_engine_process_duration_seconds",
 		"orderbook_engine_per_order_match_count",
+		"orderbook_engine_time_to_first_fill_seconds",
 	}
 
 	for _, metricName := range expectedNames {

@@ -21,8 +21,3 @@ type Trade struct {
 type PricePoint struct {
 	Price float64 `json:"price"`
 }
-
-type Trader struct {
-	TradeId string  `json:"trade_id"`
-	Price   float64 `json:"price"`
-}

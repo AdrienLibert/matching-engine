@@ -20,6 +20,9 @@ type MatchingEngine struct {
 	quoteTopic      string
 	tradeTopic      string
 	pricePointTopic string
+	firstFillStart  map[string]time.Time
+	lastMidPrice    float64
+	hasLastMidPrice bool
 }
 
 func NewMatchingEngine(kafkaClient *KafkaClient, orderBook *Orderbook) *MatchingEngine {
@@ -30,6 +33,7 @@ func NewMatchingEngine(kafkaClient *KafkaClient, orderBook *Orderbook) *Matching
 	me.quoteTopic = "orders.topic"
 	me.tradeTopic = "trades.topic"
 	me.pricePointTopic = "order.last_price.topic"
+	me.firstFillStart = make(map[string]time.Time)
 	return me
 }
 
@@ -76,7 +80,6 @@ func (me *MatchingEngine) Start(ctx context.Context) {
 						trade.Status,
 						trade.Timestamp,
 					)
-					fmt.Println("INFO: produced trade:", producerMessage)
 					producedCount.Add(1)
 					if me.metrics != nil {
 						me.metrics.ProducedMessagesCounter.Inc()
@@ -110,7 +113,6 @@ func (me *MatchingEngine) Start(ctx context.Context) {
 						off,
 						pricePoint.Price,
 					)
-					fmt.Println("INFO: produced price point:", producerMessage)
 					producedCount.Add(1)
 					if me.metrics != nil {
 						me.metrics.ProducedMessagesCounter.Inc()
@@ -253,6 +255,8 @@ func (me *MatchingEngine) Process(inOrder *Order, producerChannel chan<- Trade, 
 			matchCount++
 			if me.metrics != nil {
 				me.metrics.ExecutedTradesCounter.Inc()
+				me.metrics.ExecutedQuantityCounter.Add(float64(tradeQuantity))
+				me.observeTimeToFirstFill(outOrder.OrderID)
 			}
 			fmt.Printf(
 				"INFO: Executed trade %s @ %d: %s %d @ %f | Left Order ID: %s, Right Order ID: %s | "+
@@ -285,7 +289,11 @@ func (me *MatchingEngine) Process(inOrder *Order, producerChannel chan<- Trade, 
 		}
 	}
 	if inOrder.Quantity > 0 { // don't add if empty
+		if me.metrics != nil {
+			me.metrics.SubmittedQuantityCounter.Add(float64(inOrder.Quantity))
+		}
 		me.orderBook.AddOrder(inOrder, inAction)
+		me.recordRestingOrder(inOrder.OrderID)
 	}
 }
 
@@ -304,16 +312,125 @@ func (me *MatchingEngine) updateOrderbookGauges() {
 		bestAsk = me.orderBook.BestAsk.Peak().(float64)
 	}
 
+	bestBidQuantity := me.quantityAtPrice(bestBid, true)
+	bestAskQuantity := me.quantityAtPrice(bestAsk, false)
+
 	midPrice := 0.0
 	spread := 0.0
+	spreadBps := 0.0
+	twoSidedBook := 0.0
+	midPriceJumpAbs := 0.0
 	if bestBid > 0 && bestAsk > 0 {
 		midPrice = (bestBid + bestAsk) / 2
 		spread = bestAsk - bestBid
+		if midPrice > 0 {
+			spreadBps = 10000 * spread / midPrice
+		}
+		twoSidedBook = 1
+		if me.hasLastMidPrice {
+			midPriceJumpAbs = math.Abs(midPrice - me.lastMidPrice)
+		}
+		me.lastMidPrice = midPrice
+		me.hasLastMidPrice = true
 	}
 
 	me.metrics.BestBidGauge.Set(bestBid)
 	me.metrics.BestAskGauge.Set(bestAsk)
+	me.metrics.BestBidQuantityGauge.Set(float64(bestBidQuantity))
+	me.metrics.BestAskQuantityGauge.Set(float64(bestAskQuantity))
 	me.metrics.MidPriceGauge.Set(midPrice)
 	me.metrics.SpreadGauge.Set(spread)
+	me.metrics.SpreadBpsGauge.Set(spreadBps)
+	me.metrics.TwoSidedBookGauge.Set(twoSidedBook)
+	me.metrics.MidPriceJumpAbsGauge.Set(midPriceJumpAbs)
+	me.metrics.NearMidDepthQuantityGauge.WithLabelValues("bid", "25").Set(float64(me.nearMidDepthQuantity(midPrice, 25, true)))
+	me.metrics.NearMidDepthQuantityGauge.WithLabelValues("ask", "25").Set(float64(me.nearMidDepthQuantity(midPrice, 25, false)))
+	me.metrics.NearMidDepthQuantityGauge.WithLabelValues("bid", "50").Set(float64(me.nearMidDepthQuantity(midPrice, 50, true)))
+	me.metrics.NearMidDepthQuantityGauge.WithLabelValues("ask", "50").Set(float64(me.nearMidDepthQuantity(midPrice, 50, false)))
+	me.metrics.NearMidDepthQuantityGauge.WithLabelValues("bid", "100").Set(float64(me.nearMidDepthQuantity(midPrice, 100, true)))
+	me.metrics.NearMidDepthQuantityGauge.WithLabelValues("ask", "100").Set(float64(me.nearMidDepthQuantity(midPrice, 100, false)))
 	me.metrics.OpenOrderCountGauge.Set(float64(me.orderBook.OpenOrderCount()))
+}
+
+func (me *MatchingEngine) quantityAtPrice(price float64, isBid bool) int64 {
+	if me.orderBook == nil || price <= 0 {
+		return 0
+	}
+
+	var level *OrderQueue
+	if isBid {
+		level = me.orderBook.PriceToBuyOrders[price]
+	} else {
+		level = me.orderBook.PriceToSellOrders[price]
+	}
+
+	if level == nil || level.Len() == 0 {
+		return 0
+	}
+
+	var quantity int64
+	for _, order := range level.items[level.head:] {
+		if order != nil {
+			quantity += order.Quantity
+		}
+	}
+
+	return quantity
+}
+
+func (me *MatchingEngine) nearMidDepthQuantity(midPrice float64, bandBps float64, isBid bool) int64 {
+	if me.orderBook == nil || midPrice <= 0 {
+		return 0
+	}
+
+	thresholdRatio := bandBps / 10000
+	var quantity int64
+
+	if isBid {
+		lowerBound := midPrice * (1 - thresholdRatio)
+		for price, level := range me.orderBook.PriceToBuyOrders {
+			if price < lowerBound || price > midPrice || level == nil {
+				continue
+			}
+			for _, order := range level.items[level.head:] {
+				if order != nil {
+					quantity += order.Quantity
+				}
+			}
+		}
+		return quantity
+	}
+
+	upperBound := midPrice * (1 + thresholdRatio)
+	for price, level := range me.orderBook.PriceToSellOrders {
+		if price < midPrice || price > upperBound || level == nil {
+			continue
+		}
+		for _, order := range level.items[level.head:] {
+			if order != nil {
+				quantity += order.Quantity
+			}
+		}
+	}
+
+	return quantity
+}
+
+func (me *MatchingEngine) recordRestingOrder(orderID string) {
+	if orderID == "" {
+		return
+	}
+	me.firstFillStart[orderID] = time.Now()
+}
+
+func (me *MatchingEngine) observeTimeToFirstFill(orderID string) {
+	if me.metrics == nil || orderID == "" {
+		return
+	}
+	startTime, ok := me.firstFillStart[orderID]
+	if !ok {
+		return
+	}
+	me.metrics.TimeToFirstFillHistogram.Observe(time.Since(startTime).Seconds())
+	delete(me.firstFillStart, orderID)
 }
