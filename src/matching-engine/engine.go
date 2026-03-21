@@ -211,6 +211,14 @@ func (me *MatchingEngine) Process(inOrder *Order, producerChannel chan<- Trade, 
 		me.updateOrderbookGauges()
 	}()
 
+	if inOrder == nil {
+		return
+	}
+	if strings.EqualFold(inOrder.Action, "CANCEL") {
+		me.orderBook.CancelOrder(inOrder.OrderID)
+		return
+	}
+
 	var oppositeBook *map[float64]*OrderQueue
 	var oppositeBestPrice Heap
 	var inAction string
@@ -273,8 +281,11 @@ func (me *MatchingEngine) Process(inOrder *Order, producerChannel chan<- Trade, 
 			}
 
 			if outOrder.Quantity == 0 {
-				_, popped := oppositeBestPriceQueue.PopFront()
+				poppedOrder, popped := oppositeBestPriceQueue.PopFront()
 				if popped {
+					if poppedOrder != nil {
+						me.orderBook.unregisterOrder(poppedOrder.OrderID)
+					}
 					me.orderBook.decrementOpenOrderCount()
 				}
 			}

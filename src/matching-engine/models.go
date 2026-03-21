@@ -54,12 +54,19 @@ func messageToOrder(messageValue []byte) (Order, error) {
 	}
 
 	order := fromProtoOrder(&wireOrder)
+	order.Action = strings.ToUpper(strings.TrimSpace(order.Action))
+
+	if order.Action == "CANCEL" {
+		if strings.TrimSpace(order.OrderID) == "" {
+			return Order{}, fmt.Errorf("invalid cancel order: missing order_id")
+		}
+		return order, nil
+	}
 
 	if order.Quantity <= 0 {
 		return Order{}, fmt.Errorf("invalid order quantity: must be > 0")
 	}
 
-	order.Action = strings.ToUpper(strings.TrimSpace(order.Action))
 	if order.Action != "BUY" && order.Action != "SELL" {
 		return Order{}, fmt.Errorf("invalid order action: %s", order.Action)
 	}

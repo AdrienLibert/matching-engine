@@ -53,6 +53,25 @@ func TestMessageToOrderRejectsMissingAction(t *testing.T) {
 	}
 }
 
+func TestMessageToOrderAcceptsCancelWithOrderID(t *testing.T) {
+	message := encodeOrderMessage(t, &contracts.Order{OrderId: "uuid-c1", Action: " cancel ", Timestamp: 1700000010})
+	order, err := messageToOrder(message)
+	if err != nil {
+		t.Fatalf("expected valid cancel message, got error: %v", err)
+	}
+	if order.Action != "CANCEL" || order.OrderID != "uuid-c1" {
+		t.Fatalf("unexpected cancel order: %+v", order)
+	}
+}
+
+func TestMessageToOrderRejectsCancelWithoutOrderID(t *testing.T) {
+	message := encodeOrderMessage(t, &contracts.Order{Action: "CANCEL", Timestamp: 1700000011})
+	_, err := messageToOrder(message)
+	if err == nil {
+		t.Fatalf("expected reject for cancel without order id")
+	}
+}
+
 func TestMessageToOrderRejectsZeroQuantity(t *testing.T) {
 	message := encodeOrderMessage(t, &contracts.Order{OrderId: "uuid-4", OrderType: "limit", Price: 11.0, Quantity: 0, Action: "BUY", Timestamp: 1700000003})
 	_, err := messageToOrder(message)

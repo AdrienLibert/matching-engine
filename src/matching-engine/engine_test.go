@@ -343,3 +343,36 @@ func TestMatchingEngineOpenOrderCountRemainsO1AndAccurate(t *testing.T) {
 	assert.Equal(t, []string{"sell-2"}, levelOrderIDs(orderbook.PriceToSellOrders[10.0]))
 	assert.Equal(t, []int64{2}, levelQuantities(orderbook.PriceToSellOrders[10.0]))
 }
+
+func TestMatchingEngineProcessCancelRemovesRestingOrdersNoEvents(t *testing.T) {
+	orderbook := NewOrderBook()
+	matchingEngine := NewMatchingEngine(nil, orderbook)
+	now := time.Now().UTC().Unix()
+	matchingEngine.Process(&Order{OrderID: "buy-1", Price: 10, Quantity: 2, Action: "BUY", Timestamp: now}, nil, nil)
+	matchingEngine.Process(&Order{OrderID: "sell-1", Price: 11, Quantity: 3, Action: "SELL", Timestamp: now}, nil, nil)
+
+	tradeChannel := make(chan Trade, 2)
+	pricePointChannel := make(chan PricePoint, 2)
+	matchingEngine.Process(&Order{OrderID: "buy-1", Action: "CANCEL", Timestamp: now + 1}, tradeChannel, pricePointChannel)
+	matchingEngine.Process(&Order{OrderID: "sell-1", Action: "CANCEL", Timestamp: now + 2}, tradeChannel, pricePointChannel)
+
+	assert.Equal(t, 0, len(tradeChannel))
+	assert.Equal(t, 0, len(pricePointChannel))
+	assert.Equal(t, 0, orderbook.OpenOrderCount())
+	assert.Equal(t, 0, len(orderbook.PriceToBuyOrders))
+	assert.Equal(t, 0, len(orderbook.PriceToSellOrders))
+}
+
+func TestMatchingEngineProcessCancelIsIdempotentAndMissingNoOp(t *testing.T) {
+	orderbook := NewOrderBook()
+	matchingEngine := NewMatchingEngine(nil, orderbook)
+	now := time.Now().UTC().Unix()
+	matchingEngine.Process(&Order{OrderID: "buy-1", Price: 10, Quantity: 2, Action: "BUY", Timestamp: now}, nil, nil)
+
+	matchingEngine.Process(&Order{OrderID: "buy-1", Action: "CANCEL", Timestamp: now + 1}, nil, nil)
+	matchingEngine.Process(&Order{OrderID: "buy-1", Action: "CANCEL", Timestamp: now + 2}, nil, nil)
+	matchingEngine.Process(&Order{OrderID: "missing", Action: "CANCEL", Timestamp: now + 3}, nil, nil)
+
+	assert.Equal(t, 0, orderbook.OpenOrderCount())
+	assert.Equal(t, 0, len(orderbook.PriceToBuyOrders))
+}
