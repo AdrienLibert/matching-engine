@@ -105,10 +105,10 @@ func pricePointToProto(pricePoint PricePoint) *contracts.PricePoint {
 	return &contracts.PricePoint{Price: pricePoint.Price}
 }
 
-func createTrade(tradeId string, inOrder *Order, tradeQuantity int64, price float64, action string, ts int64) Trade {
+func createTrade(tradeId string, orderID string, remainingQuantity int64, tradeQuantity int64, price float64, action string, ts int64) Trade {
 	var status string
 
-	if inOrder.Quantity == 0 {
+	if remainingQuantity == 0 {
 		status = "closed"
 	} else {
 		status = "partial"
@@ -116,7 +116,7 @@ func createTrade(tradeId string, inOrder *Order, tradeQuantity int64, price floa
 
 	trade := Trade{
 		TradeId:   tradeId,
-		OrderId:   inOrder.OrderID,
+		OrderId:   orderID,
 		Quantity:  tradeQuantity,
 		Price:     price,
 		Action:    action,

@@ -86,7 +86,7 @@ func TestOrderBookAddOrder(t *testing.T) {
 		OrderID:   "uuid-uuid-uuid-uuid",
 		OrderType: "limit",
 		Price:     price,
-		Quantity:  20.0,
+		Quantity:  20,
 		Timestamp: now,
 	}
 
@@ -100,7 +100,7 @@ func TestOrderBookAddOrder(t *testing.T) {
 		OrderID:   "uuid-uuid-uuid-uuid",
 		OrderType: "limit",
 		Price:     price,
-		Quantity:  -20.0,
+		Quantity:  20,
 		Timestamp: now,
 	}
 	orderbook.AddOrder(&sellOrder, "SELL")
@@ -120,7 +120,7 @@ func TestOrderBookOpenOrderCountTracksMutations(t *testing.T) {
 
 	buy1 := Order{OrderID: "buy-1", OrderType: "limit", Price: 10.0, Quantity: 2, Timestamp: now}
 	buy2 := Order{OrderID: "buy-2", OrderType: "limit", Price: 10.0, Quantity: 3, Timestamp: now}
-	sell1 := Order{OrderID: "sell-1", OrderType: "limit", Price: 11.0, Quantity: -4, Timestamp: now}
+	sell1 := Order{OrderID: "sell-1", OrderType: "limit", Price: 11.0, Quantity: 4, Timestamp: now}
 
 	orderbook.AddOrder(&buy1, "BUY")
 	orderbook.AddOrder(&buy2, "BUY")
@@ -195,27 +195,27 @@ func TestOrderBookAddOrderBestAskInvariant(t *testing.T) {
 
 	steps := []step{
 		{
-			order:       Order{OrderID: "ask-12", OrderType: "limit", Price: 12.0, Quantity: -1, Timestamp: now},
+			order:       Order{OrderID: "ask-12", OrderType: "limit", Price: 12.0, Quantity: 1, Timestamp: now},
 			expectedTop: 12.0,
 			expectedLen: 1,
 		},
 		{
-			order:       Order{OrderID: "ask-15", OrderType: "limit", Price: 15.0, Quantity: -1, Timestamp: now},
+			order:       Order{OrderID: "ask-15", OrderType: "limit", Price: 15.0, Quantity: 1, Timestamp: now},
 			expectedTop: 12.0,
 			expectedLen: 2,
 		},
 		{
-			order:       Order{OrderID: "ask-10", OrderType: "limit", Price: 10.0, Quantity: -1, Timestamp: now},
+			order:       Order{OrderID: "ask-10", OrderType: "limit", Price: 10.0, Quantity: 1, Timestamp: now},
 			expectedTop: 10.0,
 			expectedLen: 3,
 		},
 		{
-			order:       Order{OrderID: "ask-11", OrderType: "limit", Price: 11.0, Quantity: -1, Timestamp: now},
+			order:       Order{OrderID: "ask-11", OrderType: "limit", Price: 11.0, Quantity: 1, Timestamp: now},
 			expectedTop: 10.0,
 			expectedLen: 4,
 		},
 		{
-			order:       Order{OrderID: "ask-10-dup", OrderType: "limit", Price: 10.0, Quantity: -2, Timestamp: now},
+			order:       Order{OrderID: "ask-10-dup", OrderType: "limit", Price: 10.0, Quantity: 2, Timestamp: now},
 			expectedTop: 10.0,
 			expectedLen: 4,
 		},

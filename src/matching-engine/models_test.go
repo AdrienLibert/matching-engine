@@ -1,6 +1,7 @@
 package main
 
 import (
+	"math"
 	"testing"
 
 	"orderbookpb/contracts"
@@ -35,12 +36,12 @@ func TestMessageToOrderValid(t *testing.T) {
 	}
 }
 
-func TestMessageToOrderRejectsNegativeQuantity(t *testing.T) {
-	message := encodeOrderMessage(t, &contracts.Order{OrderId: "uuid-3", OrderType: "limit", Price: 11.0, Quantity: -5, Action: "SELL", Timestamp: 1700000002})
+func TestMessageToOrderRejectsOverflowQuantity(t *testing.T) {
+	message := encodeOrderMessage(t, &contracts.Order{OrderId: "uuid-3", OrderType: "limit", Price: 11.0, Quantity: uint64(math.MaxInt64) + 1, Action: "SELL", Timestamp: 1700000002})
 	_, err := messageToOrder(message)
 
 	if err == nil {
-		t.Fatalf("expected reject for negative quantity")
+		t.Fatalf("expected reject for overflow quantity")
 	}
 }
 
@@ -128,8 +129,7 @@ func TestPricePointToMessageRoundTrip(t *testing.T) {
 }
 
 func TestCreateTradeStatusClosed(t *testing.T) {
-	order := &Order{OrderID: "order-closed", Quantity: 0}
-	trade := createTrade("trade-closed", order, 5, 10.0, "BUY", 1700000002)
+	trade := createTrade("trade-closed", "order-closed", 0, 5, 10.0, "BUY", 1700000002)
 
 	if trade.Status != "closed" {
 		t.Fatalf("expected closed status, got %s", trade.Status)
@@ -140,8 +140,7 @@ func TestCreateTradeStatusClosed(t *testing.T) {
 }
 
 func TestCreateTradeStatusPartial(t *testing.T) {
-	order := &Order{OrderID: "order-partial", Quantity: 2}
-	trade := createTrade("trade-partial", order, 3, 11.0, "SELL", 1700000003)
+	trade := createTrade("trade-partial", "order-partial", 2, 3, 11.0, "SELL", 1700000003)
 
 	if trade.Status != "partial" {
 		t.Fatalf("expected partial status, got %s", trade.Status)
