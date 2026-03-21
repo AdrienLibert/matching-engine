@@ -86,7 +86,7 @@ func TestOrderBookAddOrder(t *testing.T) {
 		OrderID:   "uuid-uuid-uuid-uuid",
 		OrderType: "limit",
 		Price:     price,
-		Quantity:  20.0,
+		Quantity:  20,
 		Timestamp: now,
 	}
 
@@ -100,7 +100,7 @@ func TestOrderBookAddOrder(t *testing.T) {
 		OrderID:   "uuid-uuid-uuid-uuid",
 		OrderType: "limit",
 		Price:     price,
-		Quantity:  -20.0,
+		Quantity:  20,
 		Timestamp: now,
 	}
 	orderbook.AddOrder(&sellOrder, "SELL")
@@ -120,7 +120,7 @@ func TestOrderBookOpenOrderCountTracksMutations(t *testing.T) {
 
 	buy1 := Order{OrderID: "buy-1", OrderType: "limit", Price: 10.0, Quantity: 2, Timestamp: now}
 	buy2 := Order{OrderID: "buy-2", OrderType: "limit", Price: 10.0, Quantity: 3, Timestamp: now}
-	sell1 := Order{OrderID: "sell-1", OrderType: "limit", Price: 11.0, Quantity: -4, Timestamp: now}
+	sell1 := Order{OrderID: "sell-1", OrderType: "limit", Price: 11.0, Quantity: 4, Timestamp: now}
 
 	orderbook.AddOrder(&buy1, "BUY")
 	orderbook.AddOrder(&buy2, "BUY")
@@ -195,27 +195,27 @@ func TestOrderBookAddOrderBestAskInvariant(t *testing.T) {
 
 	steps := []step{
 		{
-			order:       Order{OrderID: "ask-12", OrderType: "limit", Price: 12.0, Quantity: -1, Timestamp: now},
+			order:       Order{OrderID: "ask-12", OrderType: "limit", Price: 12.0, Quantity: 1, Timestamp: now},
 			expectedTop: 12.0,
 			expectedLen: 1,
 		},
 		{
-			order:       Order{OrderID: "ask-15", OrderType: "limit", Price: 15.0, Quantity: -1, Timestamp: now},
+			order:       Order{OrderID: "ask-15", OrderType: "limit", Price: 15.0, Quantity: 1, Timestamp: now},
 			expectedTop: 12.0,
 			expectedLen: 2,
 		},
 		{
-			order:       Order{OrderID: "ask-10", OrderType: "limit", Price: 10.0, Quantity: -1, Timestamp: now},
+			order:       Order{OrderID: "ask-10", OrderType: "limit", Price: 10.0, Quantity: 1, Timestamp: now},
 			expectedTop: 10.0,
 			expectedLen: 3,
 		},
 		{
-			order:       Order{OrderID: "ask-11", OrderType: "limit", Price: 11.0, Quantity: -1, Timestamp: now},
+			order:       Order{OrderID: "ask-11", OrderType: "limit", Price: 11.0, Quantity: 1, Timestamp: now},
 			expectedTop: 10.0,
 			expectedLen: 4,
 		},
 		{
-			order:       Order{OrderID: "ask-10-dup", OrderType: "limit", Price: 10.0, Quantity: -2, Timestamp: now},
+			order:       Order{OrderID: "ask-10-dup", OrderType: "limit", Price: 10.0, Quantity: 2, Timestamp: now},
 			expectedTop: 10.0,
 			expectedLen: 4,
 		},
@@ -274,4 +274,108 @@ func TestOrderQueueCompactsAndPreservesOrder(t *testing.T) {
 	assert.Equal(t, 64, queue.Len())
 	assert.Equal(t, 0, queue.head)
 	assert.Equal(t, 64, len(queue.items))
+}
+
+func TestOrderbookCancelOrderRemovesHeadAndPreservesFIFO(t *testing.T) {
+	orderbook := NewOrderBook()
+	now := time.Now().UTC().Unix()
+
+	first := Order{OrderID: "buy-1", OrderType: "limit", Price: 10.0, Quantity: 2, Timestamp: now}
+	second := Order{OrderID: "buy-2", OrderType: "limit", Price: 10.0, Quantity: 3, Timestamp: now}
+	third := Order{OrderID: "buy-3", OrderType: "limit", Price: 10.0, Quantity: 4, Timestamp: now}
+
+	orderbook.AddOrder(&first, "BUY")
+	orderbook.AddOrder(&second, "BUY")
+	orderbook.AddOrder(&third, "BUY")
+
+	removed := orderbook.CancelOrder("buy-1")
+	assert.True(t, removed)
+	assert.Equal(t, 2, orderbook.OpenOrderCount())
+
+	level := orderbook.PriceToBuyOrders[10.0]
+	remaining := level.Snapshot()
+	if assert.Len(t, remaining, 2) {
+		assert.Equal(t, "buy-2", remaining[0].OrderID)
+		assert.Equal(t, "buy-3", remaining[1].OrderID)
+	}
+	assert.Equal(t, 10.0, orderbook.BestBid.Peak())
+}
+
+func TestOrderbookCancelOrderRemovesMiddleAndPreservesFIFO(t *testing.T) {
+	orderbook := NewOrderBook()
+	now := time.Now().UTC().Unix()
+
+	first := Order{OrderID: "sell-1", OrderType: "limit", Price: 11.0, Quantity: 2, Timestamp: now}
+	second := Order{OrderID: "sell-2", OrderType: "limit", Price: 11.0, Quantity: 3, Timestamp: now}
+	third := Order{OrderID: "sell-3", OrderType: "limit", Price: 11.0, Quantity: 4, Timestamp: now}
+
+	orderbook.AddOrder(&first, "SELL")
+	orderbook.AddOrder(&second, "SELL")
+	orderbook.AddOrder(&third, "SELL")
+
+	removed := orderbook.CancelOrder("sell-2")
+	assert.True(t, removed)
+	assert.Equal(t, 2, orderbook.OpenOrderCount())
+
+	level := orderbook.PriceToSellOrders[11.0]
+	remaining := level.Snapshot()
+	if assert.Len(t, remaining, 2) {
+		assert.Equal(t, "sell-1", remaining[0].OrderID)
+		assert.Equal(t, "sell-3", remaining[1].OrderID)
+	}
+	assert.Equal(t, 11.0, orderbook.BestAsk.Peak())
+}
+
+func TestOrderbookCancelOrderRemovesLastLevelAndKeepsBestPriceInvariant(t *testing.T) {
+	orderbook := NewOrderBook()
+	now := time.Now().UTC().Unix()
+
+	bestAsk := Order{OrderID: "ask-best", OrderType: "limit", Price: 10.0, Quantity: 2, Timestamp: now}
+	nextAsk := Order{OrderID: "ask-next", OrderType: "limit", Price: 11.0, Quantity: 3, Timestamp: now}
+
+	orderbook.AddOrder(&bestAsk, "SELL")
+	orderbook.AddOrder(&nextAsk, "SELL")
+
+	removed := orderbook.CancelOrder("ask-best")
+	assert.True(t, removed)
+	assert.Equal(t, 1, orderbook.OpenOrderCount())
+	assert.Nil(t, orderbook.PriceToSellOrders[10.0])
+	assert.Equal(t, 1, orderbook.BestAsk.Len())
+	assert.Equal(t, 11.0, orderbook.BestAsk.Peak())
+}
+
+func TestOrderbookCancelOrderRemovesBestBidLevelAndKeepsHeapConsistent(t *testing.T) {
+	orderbook := NewOrderBook()
+	now := time.Now().UTC().Unix()
+
+	bestBid := Order{OrderID: "bid-best", OrderType: "limit", Price: 12.0, Quantity: 2, Timestamp: now}
+	nextBid := Order{OrderID: "bid-next", OrderType: "limit", Price: 11.0, Quantity: 3, Timestamp: now}
+
+	orderbook.AddOrder(&bestBid, "BUY")
+	orderbook.AddOrder(&nextBid, "BUY")
+
+	removed := orderbook.CancelOrder("bid-best")
+	assert.True(t, removed)
+	assert.Equal(t, 1, orderbook.OpenOrderCount())
+	assert.Nil(t, orderbook.PriceToBuyOrders[12.0])
+	assert.Equal(t, 1, orderbook.BestBid.Len())
+	assert.Equal(t, 11.0, orderbook.BestBid.Peak())
+}
+
+func TestOrderbookCancelOrderMissingOrderIsNoOp(t *testing.T) {
+	orderbook := NewOrderBook()
+	now := time.Now().UTC().Unix()
+
+	buy := Order{OrderID: "buy-1", OrderType: "limit", Price: 9.0, Quantity: 5, Timestamp: now}
+	orderbook.AddOrder(&buy, "BUY")
+
+	removed := orderbook.CancelOrder("unknown-order")
+	assert.False(t, removed)
+	assert.Equal(t, 1, orderbook.OpenOrderCount())
+
+	level := orderbook.PriceToBuyOrders[9.0]
+	remaining := level.Snapshot()
+	if assert.Len(t, remaining, 1) {
+		assert.Equal(t, "buy-1", remaining[0].OrderID)
+	}
 }

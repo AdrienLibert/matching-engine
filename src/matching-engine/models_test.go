@@ -1,6 +1,7 @@
 package main
 
 import (
+	"math"
 	"testing"
 
 	"orderbookpb/contracts"
@@ -35,12 +36,15 @@ func TestMessageToOrderValid(t *testing.T) {
 	}
 }
 
-func TestMessageToOrderRejectsNegativeQuantity(t *testing.T) {
-	message := encodeOrderMessage(t, &contracts.Order{OrderId: "uuid-3", OrderType: "limit", Price: 11.0, Quantity: -5, Action: "SELL", Timestamp: 1700000002})
-	_, err := messageToOrder(message)
+func TestMessageToOrderAcceptsLargeUnsignedQuantity(t *testing.T) {
+	message := encodeOrderMessage(t, &contracts.Order{OrderId: "uuid-3", OrderType: "limit", Price: 11.0, Quantity: uint64(math.MaxInt64) + 1, Action: "SELL", Timestamp: 1700000002})
+	order, err := messageToOrder(message)
 
-	if err == nil {
-		t.Fatalf("expected reject for negative quantity")
+	if err != nil {
+		t.Fatalf("expected large unsigned quantity to be accepted, got error: %v", err)
+	}
+	if order.Quantity != uint64(math.MaxInt64)+1 {
+		t.Fatalf("unexpected parsed quantity: got %d", order.Quantity)
 	}
 }
 
@@ -50,6 +54,25 @@ func TestMessageToOrderRejectsMissingAction(t *testing.T) {
 
 	if err == nil {
 		t.Fatalf("expected reject for missing action")
+	}
+}
+
+func TestMessageToOrderAcceptsCancelWithOrderID(t *testing.T) {
+	message := encodeOrderMessage(t, &contracts.Order{OrderId: "uuid-c1", Action: " cancel ", Timestamp: 1700000010})
+	order, err := messageToOrder(message)
+	if err != nil {
+		t.Fatalf("expected valid cancel message, got error: %v", err)
+	}
+	if order.Action != "CANCEL" || order.OrderID != "uuid-c1" {
+		t.Fatalf("unexpected cancel order: %+v", order)
+	}
+}
+
+func TestMessageToOrderRejectsCancelWithoutOrderID(t *testing.T) {
+	message := encodeOrderMessage(t, &contracts.Order{Action: "CANCEL", Timestamp: 1700000011})
+	_, err := messageToOrder(message)
+	if err == nil {
+		t.Fatalf("expected reject for cancel without order id")
 	}
 }
 
@@ -109,8 +132,7 @@ func TestPricePointToMessageRoundTrip(t *testing.T) {
 }
 
 func TestCreateTradeStatusClosed(t *testing.T) {
-	order := &Order{OrderID: "order-closed", Quantity: 0}
-	trade := createTrade("trade-closed", order, 5, 10.0, "BUY", 1700000002)
+	trade := createTrade("trade-closed", "order-closed", 0, 5, 10.0, "BUY", 1700000002)
 
 	if trade.Status != "closed" {
 		t.Fatalf("expected closed status, got %s", trade.Status)
@@ -121,8 +143,7 @@ func TestCreateTradeStatusClosed(t *testing.T) {
 }
 
 func TestCreateTradeStatusPartial(t *testing.T) {
-	order := &Order{OrderID: "order-partial", Quantity: 2}
-	trade := createTrade("trade-partial", order, 3, 11.0, "SELL", 1700000003)
+	trade := createTrade("trade-partial", "order-partial", 2, 3, 11.0, "SELL", 1700000003)
 
 	if trade.Status != "partial" {
 		t.Fatalf("expected partial status, got %s", trade.Status)

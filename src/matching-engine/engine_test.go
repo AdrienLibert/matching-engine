@@ -24,12 +24,12 @@ func collectPricePoints(pricePointChannel <-chan PricePoint, count int) []PriceP
 	return pricePoints
 }
 
-func levelQuantities(level *OrderQueue) []int64 {
+func levelQuantities(level *OrderQueue) []uint64 {
 	if level == nil {
-		return []int64{}
+		return []uint64{}
 	}
 
-	quantities := make([]int64, 0, level.Len())
+	quantities := make([]uint64, 0, level.Len())
 	for _, order := range level.items[level.head:] {
 		quantities = append(quantities, order.Quantity)
 	}
@@ -71,12 +71,12 @@ func TestMatchingEngineProcessScenarios(t *testing.T) {
 			assertFn: func(t *testing.T, orderbook *Orderbook) {
 				assert.Equal(t, 1, orderbook.BestBid.Len())
 				assert.Equal(t, 11.0, orderbook.BestBid.Peak())
-				assert.Equal(t, []int64{5}, levelQuantities(orderbook.PriceToBuyOrders[11.0]))
+				assert.Equal(t, []uint64{5}, levelQuantities(orderbook.PriceToBuyOrders[11.0]))
 				assert.Equal(t, []string{"incoming-buy"}, levelOrderIDs(orderbook.PriceToBuyOrders[11.0]))
 
 				assert.Equal(t, 1, orderbook.BestAsk.Len())
 				assert.Equal(t, 12.0, orderbook.BestAsk.Peak())
-				assert.Equal(t, []int64{5, 3}, levelQuantities(orderbook.PriceToSellOrders[12.0]))
+				assert.Equal(t, []uint64{5, 3}, levelQuantities(orderbook.PriceToSellOrders[12.0]))
 				assert.Equal(t, []string{"resting-sell-1", "resting-sell-2"}, levelOrderIDs(orderbook.PriceToSellOrders[12.0]))
 			},
 		},
@@ -110,7 +110,7 @@ func TestMatchingEngineProcessScenarios(t *testing.T) {
 
 				assert.Equal(t, 1, orderbook.BestAsk.Len())
 				assert.Equal(t, 11.0, orderbook.BestAsk.Peak())
-				assert.Equal(t, []int64{6, 2}, levelQuantities(orderbook.PriceToSellOrders[11.0]))
+				assert.Equal(t, []uint64{6, 2}, levelQuantities(orderbook.PriceToSellOrders[11.0]))
 				assert.Equal(t, []string{"resting-sell-1", "resting-sell-2"}, levelOrderIDs(orderbook.PriceToSellOrders[11.0]))
 			},
 		},
@@ -126,12 +126,12 @@ func TestMatchingEngineProcessScenarios(t *testing.T) {
 			assertFn: func(t *testing.T, orderbook *Orderbook) {
 				assert.Equal(t, 1, orderbook.BestBid.Len())
 				assert.Equal(t, 11.0, orderbook.BestBid.Peak())
-				assert.Equal(t, []int64{1}, levelQuantities(orderbook.PriceToBuyOrders[11.0]))
+				assert.Equal(t, []uint64{1}, levelQuantities(orderbook.PriceToBuyOrders[11.0]))
 				assert.Equal(t, []string{"incoming-buy"}, levelOrderIDs(orderbook.PriceToBuyOrders[11.0]))
 
 				assert.Equal(t, 1, orderbook.BestAsk.Len())
 				assert.Equal(t, 12.0, orderbook.BestAsk.Peak())
-				assert.Equal(t, []int64{8}, levelQuantities(orderbook.PriceToSellOrders[12.0]))
+				assert.Equal(t, []uint64{8}, levelQuantities(orderbook.PriceToSellOrders[12.0]))
 				assert.Equal(t, []string{"sell-l3"}, levelOrderIDs(orderbook.PriceToSellOrders[12.0]))
 				assert.Equal(t, 0, len(levelOrderIDs(orderbook.PriceToSellOrders[10.0])))
 				assert.Equal(t, 0, len(levelOrderIDs(orderbook.PriceToSellOrders[11.0])))
@@ -190,7 +190,7 @@ func TestMatchingEngineProcessFIFOAndTradeOrderBuyAgainstSamePriceSells(t *testi
 
 		assert.Equal(t, []string{"buy-in", "sell-1", "buy-in", "sell-2"}, []string{trades[0].OrderId, trades[1].OrderId, trades[2].OrderId, trades[3].OrderId})
 		assert.Equal(t, []string{"BUY", "SELL", "BUY", "SELL"}, []string{trades[0].Action, trades[1].Action, trades[2].Action, trades[3].Action})
-		assert.Equal(t, []int64{2, 2, 3, 3}, []int64{trades[0].Quantity, trades[1].Quantity, trades[2].Quantity, trades[3].Quantity})
+		assert.Equal(t, []uint64{2, 2, 3, 3}, []uint64{trades[0].Quantity, trades[1].Quantity, trades[2].Quantity, trades[3].Quantity})
 		assert.Equal(t, []string{"partial", "closed", "closed", "closed"}, []string{trades[0].Status, trades[1].Status, trades[2].Status, trades[3].Status})
 
 		for _, trade := range trades {
@@ -223,7 +223,7 @@ func TestMatchingEngineProcessFIFOAndTradeOrderSellAgainstSamePriceBuys(t *testi
 
 		assert.Equal(t, []string{"sell-in", "buy-1", "sell-in", "buy-2"}, []string{trades[0].OrderId, trades[1].OrderId, trades[2].OrderId, trades[3].OrderId})
 		assert.Equal(t, []string{"SELL", "BUY", "SELL", "BUY"}, []string{trades[0].Action, trades[1].Action, trades[2].Action, trades[3].Action})
-		assert.Equal(t, []int64{2, 2, 3, 3}, []int64{trades[0].Quantity, trades[1].Quantity, trades[2].Quantity, trades[3].Quantity})
+		assert.Equal(t, []uint64{2, 2, 3, 3}, []uint64{trades[0].Quantity, trades[1].Quantity, trades[2].Quantity, trades[3].Quantity})
 		assert.Equal(t, []string{"partial", "closed", "closed", "closed"}, []string{trades[0].Status, trades[1].Status, trades[2].Status, trades[3].Status})
 
 		for _, trade := range trades {
@@ -260,7 +260,7 @@ func TestMatchingEngineProcessEventFieldsBuyFlow(t *testing.T) {
 	assert.Equal(t, []string{"buy-in", "sell-1", "buy-in", "sell-2", "buy-in", "sell-3"}, []string{trades[0].OrderId, trades[1].OrderId, trades[2].OrderId, trades[3].OrderId, trades[4].OrderId, trades[5].OrderId})
 	assert.Equal(t, []string{"BUY", "SELL", "BUY", "SELL", "BUY", "SELL"}, []string{trades[0].Action, trades[1].Action, trades[2].Action, trades[3].Action, trades[4].Action, trades[5].Action})
 	assert.Equal(t, []string{"partial", "closed", "partial", "closed", "closed", "partial"}, []string{trades[0].Status, trades[1].Status, trades[2].Status, trades[3].Status, trades[4].Status, trades[5].Status})
-	assert.Equal(t, []int64{2, 2, 3, 3, 2, 2}, []int64{trades[0].Quantity, trades[1].Quantity, trades[2].Quantity, trades[3].Quantity, trades[4].Quantity, trades[5].Quantity})
+	assert.Equal(t, []uint64{2, 2, 3, 3, 2, 2}, []uint64{trades[0].Quantity, trades[1].Quantity, trades[2].Quantity, trades[3].Quantity, trades[4].Quantity, trades[5].Quantity})
 	assert.Equal(t, []float64{10.0, 10.0, 10.0, 10.0, 11.0, 11.0}, []float64{trades[0].Price, trades[1].Price, trades[2].Price, trades[3].Price, trades[4].Price, trades[5].Price})
 
 	assert.Equal(t, []float64{10.0, 10.0, 11.0}, []float64{pricePoints[0].Price, pricePoints[1].Price, pricePoints[2].Price})
@@ -278,7 +278,7 @@ func TestMatchingEngineProcessEventFieldsBuyFlow(t *testing.T) {
 	assert.Equal(t, 0, orderbook.BestBid.Len())
 	assert.Equal(t, 1, orderbook.BestAsk.Len())
 	assert.Equal(t, 11.0, orderbook.BestAsk.Peak())
-	assert.Equal(t, []int64{2}, levelQuantities(orderbook.PriceToSellOrders[11.0]))
+	assert.Equal(t, []uint64{2}, levelQuantities(orderbook.PriceToSellOrders[11.0]))
 	assert.Equal(t, []string{"sell-3"}, levelOrderIDs(orderbook.PriceToSellOrders[11.0]))
 }
 
@@ -303,7 +303,7 @@ func TestMatchingEngineProcessEventFieldsSellFlow(t *testing.T) {
 	assert.Equal(t, []string{"sell-in", "buy-1", "sell-in", "buy-2"}, []string{trades[0].OrderId, trades[1].OrderId, trades[2].OrderId, trades[3].OrderId})
 	assert.Equal(t, []string{"SELL", "BUY", "SELL", "BUY"}, []string{trades[0].Action, trades[1].Action, trades[2].Action, trades[3].Action})
 	assert.Equal(t, []string{"partial", "closed", "closed", "partial"}, []string{trades[0].Status, trades[1].Status, trades[2].Status, trades[3].Status})
-	assert.Equal(t, []int64{3, 3, 2, 2}, []int64{trades[0].Quantity, trades[1].Quantity, trades[2].Quantity, trades[3].Quantity})
+	assert.Equal(t, []uint64{3, 3, 2, 2}, []uint64{trades[0].Quantity, trades[1].Quantity, trades[2].Quantity, trades[3].Quantity})
 	assert.Equal(t, []float64{11.0, 11.0, 10.0, 10.0}, []float64{trades[0].Price, trades[1].Price, trades[2].Price, trades[3].Price})
 
 	assert.Equal(t, []float64{11.0, 10.0}, []float64{pricePoints[0].Price, pricePoints[1].Price})
@@ -321,7 +321,7 @@ func TestMatchingEngineProcessEventFieldsSellFlow(t *testing.T) {
 	assert.Equal(t, 1, orderbook.BestBid.Len())
 	assert.Equal(t, 10.0, orderbook.BestBid.Peak())
 	assert.Equal(t, 0, orderbook.BestAsk.Len())
-	assert.Equal(t, []int64{2}, levelQuantities(orderbook.PriceToBuyOrders[10.0]))
+	assert.Equal(t, []uint64{2}, levelQuantities(orderbook.PriceToBuyOrders[10.0]))
 	assert.Equal(t, []string{"buy-2"}, levelOrderIDs(orderbook.PriceToBuyOrders[10.0]))
 }
 
@@ -341,5 +341,38 @@ func TestMatchingEngineOpenOrderCountRemainsO1AndAccurate(t *testing.T) {
 
 	assert.Equal(t, 1, orderbook.OpenOrderCount())
 	assert.Equal(t, []string{"sell-2"}, levelOrderIDs(orderbook.PriceToSellOrders[10.0]))
-	assert.Equal(t, []int64{2}, levelQuantities(orderbook.PriceToSellOrders[10.0]))
+	assert.Equal(t, []uint64{2}, levelQuantities(orderbook.PriceToSellOrders[10.0]))
+}
+
+func TestMatchingEngineProcessCancelRemovesRestingOrdersNoEvents(t *testing.T) {
+	orderbook := NewOrderBook()
+	matchingEngine := NewMatchingEngine(nil, orderbook)
+	now := time.Now().UTC().Unix()
+	matchingEngine.Process(&Order{OrderID: "buy-1", Price: 10, Quantity: 2, Action: "BUY", Timestamp: now}, nil, nil)
+	matchingEngine.Process(&Order{OrderID: "sell-1", Price: 11, Quantity: 3, Action: "SELL", Timestamp: now}, nil, nil)
+
+	tradeChannel := make(chan Trade, 2)
+	pricePointChannel := make(chan PricePoint, 2)
+	matchingEngine.Process(&Order{OrderID: "buy-1", Action: "CANCEL", Timestamp: now + 1}, tradeChannel, pricePointChannel)
+	matchingEngine.Process(&Order{OrderID: "sell-1", Action: "CANCEL", Timestamp: now + 2}, tradeChannel, pricePointChannel)
+
+	assert.Equal(t, 0, len(tradeChannel))
+	assert.Equal(t, 0, len(pricePointChannel))
+	assert.Equal(t, 0, orderbook.OpenOrderCount())
+	assert.Equal(t, 0, len(orderbook.PriceToBuyOrders))
+	assert.Equal(t, 0, len(orderbook.PriceToSellOrders))
+}
+
+func TestMatchingEngineProcessCancelIsIdempotentAndMissingNoOp(t *testing.T) {
+	orderbook := NewOrderBook()
+	matchingEngine := NewMatchingEngine(nil, orderbook)
+	now := time.Now().UTC().Unix()
+	matchingEngine.Process(&Order{OrderID: "buy-1", Price: 10, Quantity: 2, Action: "BUY", Timestamp: now}, nil, nil)
+
+	matchingEngine.Process(&Order{OrderID: "buy-1", Action: "CANCEL", Timestamp: now + 1}, nil, nil)
+	matchingEngine.Process(&Order{OrderID: "buy-1", Action: "CANCEL", Timestamp: now + 2}, nil, nil)
+	matchingEngine.Process(&Order{OrderID: "missing", Action: "CANCEL", Timestamp: now + 3}, nil, nil)
+
+	assert.Equal(t, 0, orderbook.OpenOrderCount())
+	assert.Equal(t, 0, len(orderbook.PriceToBuyOrders))
 }

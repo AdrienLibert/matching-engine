@@ -18,7 +18,7 @@ func GenerateAndPushRandomOrder(trader Trader, orderChannel chan<- Order) {
 
 	// 1. Dynamic Quantity (Log-Normal makes for more realistic "whale" orders)
 	// Most orders are small (~10-20), but some are very large.
-	quantity := int64(10 + math.Exp(rng.NormFloat64()*0.5)*10)
+	quantity := uint64(10 + math.Exp(rng.NormFloat64()*0.5)*10)
 
 	// 2. Determine Action
 	action := "BUY"
@@ -66,7 +66,7 @@ func GenerateMarketTakerOrder(trader Trader, orderChannel chan<- Order) {
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	// Corrected: Use Int63n for int64 or Intn with a cast
-	quantity := int64(5 + rng.Intn(15))
+	quantity := uint64(5 + rng.Intn(15))
 
 	action := "BUY"
 	if rng.Float64() < 0.5 {
