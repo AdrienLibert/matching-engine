@@ -24,8 +24,6 @@ func TestNewEngineMetricsInitializesRegistryAndCollectors(t *testing.T) {
 	assert.NotNil(t, metrics.ProducedMessagesCounter)
 	assert.NotNil(t, metrics.BestBidGauge)
 	assert.NotNil(t, metrics.BestAskGauge)
-	assert.NotNil(t, metrics.BestBidQuantityGauge)
-	assert.NotNil(t, metrics.BestAskQuantityGauge)
 	assert.NotNil(t, metrics.MidPriceGauge)
 	assert.NotNil(t, metrics.SpreadGauge)
 	assert.NotNil(t, metrics.OpenOrderCountGauge)
@@ -37,7 +35,7 @@ func TestNewEngineMetricsInitializesRegistryAndCollectors(t *testing.T) {
 		return
 	}
 
-	assert.Len(t, metricFamilies, 13)
+	assert.Len(t, metricFamilies, 11)
 
 	familyNames := make(map[string]bool, len(metricFamilies))
 	for _, family := range metricFamilies {
@@ -51,8 +49,6 @@ func TestNewEngineMetricsInitializesRegistryAndCollectors(t *testing.T) {
 		"orderbook_engine_produced_messages_total",
 		"orderbook_engine_best_bid",
 		"orderbook_engine_best_ask",
-		"orderbook_engine_best_bid_quantity",
-		"orderbook_engine_best_ask_quantity",
 		"orderbook_engine_mid_price",
 		"orderbook_engine_spread",
 		"orderbook_engine_open_order_count",
@@ -84,8 +80,6 @@ func TestEngineMetricsHandlerExposesPrometheusTextOutput(t *testing.T) {
 		"orderbook_engine_produced_messages_total",
 		"orderbook_engine_best_bid",
 		"orderbook_engine_best_ask",
-		"orderbook_engine_best_bid_quantity",
-		"orderbook_engine_best_ask_quantity",
 		"orderbook_engine_mid_price",
 		"orderbook_engine_spread",
 		"orderbook_engine_open_order_count",

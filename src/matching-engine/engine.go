@@ -302,9 +302,6 @@ func (me *MatchingEngine) updateOrderbookGauges() {
 		bestAsk = me.orderBook.BestAsk.Peak().(float64)
 	}
 
-	bestBidQuantity := me.quantityAtPrice(bestBid, true)
-	bestAskQuantity := me.quantityAtPrice(bestAsk, false)
-
 	midPrice := 0.0
 	spread := 0.0
 	if bestBid > 0 && bestAsk > 0 {
@@ -314,36 +311,7 @@ func (me *MatchingEngine) updateOrderbookGauges() {
 
 	me.metrics.BestBidGauge.Set(bestBid)
 	me.metrics.BestAskGauge.Set(bestAsk)
-	me.metrics.BestBidQuantityGauge.Set(float64(bestBidQuantity))
-	me.metrics.BestAskQuantityGauge.Set(float64(bestAskQuantity))
 	me.metrics.MidPriceGauge.Set(midPrice)
 	me.metrics.SpreadGauge.Set(spread)
 	me.metrics.OpenOrderCountGauge.Set(float64(me.orderBook.OpenOrderCount()))
 }
-
-func (me *MatchingEngine) quantityAtPrice(price float64, isBid bool) int64 {
-	if me.orderBook == nil || price <= 0 {
-		return 0
-	}
-
-	var level *OrderQueue
-	if isBid {
-		level = me.orderBook.PriceToBuyOrders[price]
-	} else {
-		level = me.orderBook.PriceToSellOrders[price]
-	}
-
-	if level == nil || level.Len() == 0 {
-		return 0
-	}
-
-	var quantity int64
-	for _, order := range level.items[level.head:] {
-		if order != nil {
-			quantity += order.Quantity
-		}
-	}
-
-	return quantity
-}
-

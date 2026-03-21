@@ -18,8 +18,6 @@ type EngineMetrics struct {
 	ProducedMessagesCounter     prometheus.Counter
 	BestBidGauge                prometheus.Gauge
 	BestAskGauge                prometheus.Gauge
-	BestBidQuantityGauge        prometheus.Gauge
-	BestAskQuantityGauge        prometheus.Gauge
 	MidPriceGauge               prometheus.Gauge
 	SpreadGauge                 prometheus.Gauge
 	OpenOrderCountGauge         prometheus.Gauge
@@ -68,18 +66,6 @@ func NewEngineMetrics() *EngineMetrics {
 			Name:      "best_ask",
 			Help:      "Current best ask price",
 		}),
-		BestBidQuantityGauge: prometheus.NewGauge(prometheus.GaugeOpts{
-			Namespace: "orderbook",
-			Subsystem: "engine",
-			Name:      "best_bid_quantity",
-			Help:      "Current aggregate quantity at best bid price level",
-		}),
-		BestAskQuantityGauge: prometheus.NewGauge(prometheus.GaugeOpts{
-			Namespace: "orderbook",
-			Subsystem: "engine",
-			Name:      "best_ask_quantity",
-			Help:      "Current aggregate quantity at best ask price level",
-		}),
 		MidPriceGauge: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: "orderbook",
 			Subsystem: "engine",
@@ -121,8 +107,6 @@ func NewEngineMetrics() *EngineMetrics {
 		metrics.ProducedMessagesCounter,
 		metrics.BestBidGauge,
 		metrics.BestAskGauge,
-		metrics.BestBidQuantityGauge,
-		metrics.BestAskQuantityGauge,
 		metrics.MidPriceGauge,
 		metrics.SpreadGauge,
 		metrics.OpenOrderCountGauge,
