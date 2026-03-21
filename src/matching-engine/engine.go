@@ -211,9 +211,6 @@ func (me *MatchingEngine) Process(inOrder *Order, producerChannel chan<- Trade, 
 		me.updateOrderbookGauges()
 	}()
 
-	if inOrder == nil {
-		return
-	}
 	if strings.EqualFold(inOrder.Action, "CANCEL") {
 		me.orderBook.CancelOrder(inOrder.OrderID)
 		return
@@ -251,9 +248,6 @@ func (me *MatchingEngine) Process(inOrder *Order, producerChannel chan<- Trade, 
 		// loop on nest price queue
 		for inOrder.Quantity > 0 && oppositeBestPriceQueue != nil && oppositeBestPriceQueue.Len() > 0 {
 			outOrder := oppositeBestPriceQueue.PeekFront()
-			if outOrder == nil {
-				break
-			}
 			tradeQuantity := Min(inOrder.Quantity, outOrder.Quantity)
 			price := outOrder.Price
 			tradeId := uuid.New().String()
@@ -283,9 +277,7 @@ func (me *MatchingEngine) Process(inOrder *Order, producerChannel chan<- Trade, 
 			if outOrder.Quantity == 0 {
 				poppedOrder, popped := oppositeBestPriceQueue.PopFront()
 				if popped {
-					if poppedOrder != nil {
-						me.orderBook.unregisterOrder(poppedOrder.OrderID)
-					}
+					me.orderBook.unregisterOrder(poppedOrder.OrderID)
 					me.orderBook.decrementOpenOrderCount()
 				}
 			}

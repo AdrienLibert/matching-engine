@@ -285,6 +285,7 @@ func (o *Orderbook) AddOrder(order *Order, orderAction string) {
 }
 
 func (o *Orderbook) unregisterOrder(orderID string) {
+	// Remove Order ID from OrderIDToRef map
 	if o == nil || orderID == "" {
 		return
 	}
