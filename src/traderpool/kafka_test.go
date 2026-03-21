@@ -124,7 +124,7 @@ func TestConvertOrderToMessageRoundTrip(t *testing.T) {
 	if got.OrderId != order.OrderID ||
 		got.OrderType != order.OrderType ||
 		got.Price != order.Price ||
-		got.Quantity != order.Quantity ||
+		got.Quantity != uint64(order.Quantity) ||
 		got.Action != order.Action ||
 		got.Timestamp != order.Timestamp {
 		t.Fatalf("round-trip mismatch, got %+v want %+v", got, order)

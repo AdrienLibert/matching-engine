@@ -123,7 +123,7 @@ class ColdStartOrders:
         self._starting_bid = mid_price - spread / 2
         self._starting_ask = mid_price + spread / 2
 
-    def _produce_or_raise(self, order: orderbook_pb2.Order):
+    def _produce_or_raise(self, order: orderbook_pb2.Order): # type: ignore
         delivery_error = None
         delivered = False
 
@@ -161,7 +161,7 @@ class ColdStartOrders:
 
     def produce_orders(self):
         now = int(datetime.now(timezone.utc).timestamp() * 1000000000)
-        buy_order = orderbook_pb2.Order(
+        buy_order = orderbook_pb2.Order( # type: ignore
             order_id=str(uuid.uuid4()),
             order_type="limit",
             price=self._starting_bid,
@@ -169,7 +169,7 @@ class ColdStartOrders:
             action="BUY",
             timestamp=now,
         )
-        sell_order = orderbook_pb2.Order(
+        sell_order = orderbook_pb2.Order( # type: ignore
             order_id=str(uuid.uuid4()),
             order_type="limit",
             price=self._starting_ask,

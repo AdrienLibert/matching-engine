@@ -12,7 +12,7 @@ type Order struct {
 	OrderID   string  `json:"order_id"`
 	OrderType string  `json:"order_type"`
 	Price     float64 `json:"price"`
-	Quantity  int64   `json:"quantity"`
+	Quantity  uint64  `json:"quantity"`
 	Action    string  `json:"action"`
 	Timestamp int64   `json:"timestamp"`
 }
@@ -20,7 +20,7 @@ type Order struct {
 type Trade struct {
 	TradeId   string  `json:"trade_id"`
 	OrderId   string  `json:"order_id"`
-	Quantity  int64   `json:"quantity"`
+	Quantity  uint64  `json:"quantity"`
 	Price     float64 `json:"price"`
 	Action    string  `json:"action"`
 	Status    string  `json:"status"`
@@ -54,12 +54,19 @@ func messageToOrder(messageValue []byte) (Order, error) {
 	}
 
 	order := fromProtoOrder(&wireOrder)
+	order.Action = strings.ToUpper(strings.TrimSpace(order.Action))
+
+	if order.Action == "CANCEL" {
+		if strings.TrimSpace(order.OrderID) == "" {
+			return Order{}, fmt.Errorf("invalid cancel order: missing order_id")
+		}
+		return order, nil
+	}
 
 	if order.Quantity <= 0 {
 		return Order{}, fmt.Errorf("invalid order quantity: must be > 0")
 	}
 
-	order.Action = strings.ToUpper(strings.TrimSpace(order.Action))
 	if order.Action != "BUY" && order.Action != "SELL" {
 		return Order{}, fmt.Errorf("invalid order action: %s", order.Action)
 	}
@@ -98,10 +105,10 @@ func pricePointToProto(pricePoint PricePoint) *contracts.PricePoint {
 	return &contracts.PricePoint{Price: pricePoint.Price}
 }
 
-func createTrade(tradeId string, inOrder *Order, tradeQuantity int64, price float64, action string, ts int64) Trade {
+func createTrade(tradeId string, orderID string, remainingQuantity uint64, tradeQuantity uint64, price float64, action string, ts int64) Trade {
 	var status string
 
-	if inOrder.Quantity == 0 {
+	if remainingQuantity == 0 {
 		status = "closed"
 	} else {
 		status = "partial"
@@ -109,7 +116,7 @@ func createTrade(tradeId string, inOrder *Order, tradeQuantity int64, price floa
 
 	trade := Trade{
 		TradeId:   tradeId,
-		OrderId:   inOrder.OrderID,
+		OrderId:   orderID,
 		Quantity:  tradeQuantity,
 		Price:     price,
 		Action:    action,

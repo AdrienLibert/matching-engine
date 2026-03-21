@@ -11,7 +11,7 @@ func GenerateAndPushOrder(trader Trader, orderChannel chan<- Order) {
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	// Random quantity between 10 and 40 (always positive).
-	quantity := int64(10 + rng.Intn(30))
+	quantity := uint64(10 + rng.Intn(30))
 	action := "BUY"
 	if rng.Float64() < 0.5 {
 		action = "SELL"

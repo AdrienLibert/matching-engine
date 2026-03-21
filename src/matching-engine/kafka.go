@@ -51,11 +51,6 @@ func (kc *KafkaClient) GetConsumer() sarama.Consumer {
 	if err != nil {
 		panic(err)
 	}
-	defer func() {
-		if err != nil {
-			panic(err)
-		}
-	}()
 	return consumer
 }
 
@@ -64,11 +59,6 @@ func (kc *KafkaClient) GetProducer() *sarama.SyncProducer {
 	if err != nil {
 		panic(err)
 	}
-	defer func() {
-		if err != nil {
-			panic(err)
-		}
-	}()
 	return &producer
 }
 

@@ -26,7 +26,6 @@ func NewMatchingEngine(kafkaClient *KafkaClient, orderBook *Orderbook) *Matching
 	me := new(MatchingEngine)
 	me.kafkaClient = kafkaClient
 	me.orderBook = orderBook
-	me.metrics = nil
 	me.quoteTopic = "orders.topic"
 	me.tradeTopic = "trades.topic"
 	me.pricePointTopic = "order.last_price.topic"
@@ -76,7 +75,7 @@ func (me *MatchingEngine) Start(ctx context.Context) {
 						trade.Status,
 						trade.Timestamp,
 					)
-					fmt.Println("INFO: produced trade:", producerMessage)
+
 					producedCount.Add(1)
 					if me.metrics != nil {
 						me.metrics.ProducedMessagesCounter.Inc()
@@ -110,7 +109,7 @@ func (me *MatchingEngine) Start(ctx context.Context) {
 						off,
 						pricePoint.Price,
 					)
-					fmt.Println("INFO: produced price point:", producerMessage)
+
 					producedCount.Add(1)
 					if me.metrics != nil {
 						me.metrics.ProducedMessagesCounter.Inc()
@@ -149,6 +148,9 @@ func (me *MatchingEngine) Start(ctx context.Context) {
 		}
 	}()
 
+	// orderChannel is a done-signal: the consumer goroutine sends exactly once when
+	// it exits (channel closed, context cancelled, or consumer error), unblocking Start
+	// so the caller can proceed with graceful shutdown.
 	orderChannel := make(chan []byte)
 	go func() {
 		for {
@@ -168,10 +170,10 @@ func (me *MatchingEngine) Start(ctx context.Context) {
 					if me.metrics != nil {
 						me.metrics.RejectedMalformedCounter.Inc()
 					}
-				} else {
-					fmt.Println("DEBUG: received quote:", order)
-					consumedCount.Add(1)
+					continue
 				}
+				fmt.Println("DEBUG: received quote:", order)
+				consumedCount.Add(1)
 				me.Process(&order, tradeChannel, pricePointChannel)
 			case consumerError, ok := <-errors:
 				if !ok {
@@ -179,7 +181,6 @@ func (me *MatchingEngine) Start(ctx context.Context) {
 					orderChannel <- []byte{}
 					return
 				}
-				consumedCount.Add(1)
 				fmt.Println("ERROR: received consumerError:", string(consumerError.Topic), string(consumerError.Partition), consumerError.Err)
 				orderChannel <- []byte{}
 			case <-ctx.Done():
@@ -193,7 +194,9 @@ func (me *MatchingEngine) Start(ctx context.Context) {
 	fmt.Println("INFO: closing... processed", consumedCount.Load(), "messages and produced", producedCount.Load(), "messages")
 }
 
-func Min(a, b int64) int64 {
+// Min returns the smaller of two int64 values.
+// TODO: remove once the module's go directive is bumped to 1.21+; use the built-in min() instead.
+func Min(a, b uint64) uint64 {
 	if a < b {
 		return a
 	}
@@ -211,6 +214,12 @@ func (me *MatchingEngine) Process(inOrder *Order, producerChannel chan<- Trade, 
 		me.updateOrderbookGauges()
 	}()
 
+	if strings.EqualFold(inOrder.Action, "CANCEL") {
+		fmt.Printf("DEBUG: received cancel order order_id=%s\n", inOrder.OrderID)
+		me.orderBook.CancelOrder(inOrder.OrderID)
+		return
+	}
+
 	var oppositeBook *map[float64]*OrderQueue
 	var oppositeBestPrice Heap
 	var inAction string
@@ -222,30 +231,29 @@ func (me *MatchingEngine) Process(inOrder *Order, producerChannel chan<- Trade, 
 		oppositeBestPrice = me.orderBook.BestAsk
 		inAction = "BUY"
 		outAction = "SELL"
-		if inOrder.Quantity < 0 {
-			inOrder.Quantity = -inOrder.Quantity
-		}
+		// Match when incoming bid >= best ask: taker buy crosses the spread.
 		comparator = func(x, y float64) bool { return x >= y }
 	} else if strings.EqualFold(inOrder.Action, "SELL") {
 		oppositeBook = &me.orderBook.PriceToBuyOrders
 		oppositeBestPrice = me.orderBook.BestBid
 		inAction = "SELL"
 		outAction = "BUY"
-		if inOrder.Quantity < 0 {
-			inOrder.Quantity = -inOrder.Quantity
-		}
+		// Match when incoming ask <= best bid: taker sell crosses the spread.
 		comparator = func(x, y float64) bool { return x <= y }
+	} else {
+		// Action was validated by messageToOrder; reaching here means an unhandled
+		// action slipped through. Log and discard to avoid a nil-pointer panic in the matching loop.
+		fmt.Printf("WARN: unrecognized order action %q, discarding\n", inOrder.Action)
+		return
 	}
 
-	// loop on opposite book
+	// Walk the opposite side of the book from best price inward, filling as long as
+	// the incoming order has remaining quantity and the prices cross.
 	for inOrder.Quantity > 0 && oppositeBestPrice.Len() > 0 && comparator(inOrder.Price, oppositeBestPrice.Peak().(float64)) {
 		oppositeBestPriceQueue := (*oppositeBook)[oppositeBestPrice.Peak().(float64)]
-		// loop on nest price queue
+		// Iterate through all resting orders at this price level in FIFO order.
 		for inOrder.Quantity > 0 && oppositeBestPriceQueue != nil && oppositeBestPriceQueue.Len() > 0 {
 			outOrder := oppositeBestPriceQueue.PeekFront()
-			if outOrder == nil {
-				break
-			}
 			tradeQuantity := Min(inOrder.Quantity, outOrder.Quantity)
 			price := outOrder.Price
 			tradeId := uuid.New().String()
@@ -265,20 +273,23 @@ func (me *MatchingEngine) Process(inOrder *Order, producerChannel chan<- Trade, 
 			outOrder.Quantity -= tradeQuantity
 
 			if producerChannel != nil {
-				producerChannel <- createTrade(tradeId, inOrder, tradeQuantity, price, inAction, ts)
-				producerChannel <- createTrade(tradeId, outOrder, tradeQuantity, price, outAction, ts)
+				producerChannel <- createTrade(tradeId, inOrder.OrderID, inOrder.Quantity, tradeQuantity, price, inAction, ts)
+				producerChannel <- createTrade(tradeId, outOrder.OrderID, outOrder.Quantity, tradeQuantity, price, outAction, ts)
 			}
 			if pricePointChannel != nil {
 				pricePointChannel <- createPricePoint(price)
 			}
 
 			if outOrder.Quantity == 0 {
-				_, popped := oppositeBestPriceQueue.PopFront()
+				poppedOrder, popped := oppositeBestPriceQueue.PopFront()
 				if popped {
+					me.orderBook.unregisterOrder(poppedOrder.OrderID)
 					me.orderBook.decrementOpenOrderCount()
 				}
 			}
 		}
+		// Remove the exhausted price level from the heap and the price map.
+		// The nil branch covers the defensive case where the heap and map are out of sync.
 		if oppositeBestPriceQueue == nil || oppositeBestPriceQueue.Len() == 0 {
 			bestPrice := heap.Pop(oppositeBestPrice).(float64)
 			delete(*oppositeBook, bestPrice)
@@ -299,6 +310,8 @@ func (me *MatchingEngine) updateOrderbookGauges() {
 		bestBid = me.orderBook.BestBid.Peak().(float64)
 	}
 
+	// bestAsk falls back to 0.0 when the ask side is empty.
+	// Monitoring dashboards should treat 0 as "no open asks" rather than a price of zero.
 	bestAsk := 0.0
 	if me.orderBook.BestAsk != nil && me.orderBook.BestAsk.Len() > 0 {
 		bestAsk = me.orderBook.BestAsk.Peak().(float64)
