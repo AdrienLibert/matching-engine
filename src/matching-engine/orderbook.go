@@ -97,6 +97,7 @@ func (q *OrderQueue) Remove(orderID string) bool {
 }
 
 func (q *OrderQueue) Snapshot() []*Order {
+	// Test-only helper: currently used by unit tests to assert level contents.
 	if q == nil || q.Len() == 0 {
 		return []*Order{}
 	}
@@ -302,6 +303,7 @@ func (o *Orderbook) CancelOrder(orderID string) bool {
 		return false
 	}
 
+	// Fetch price level for order to cancel price
 	var level *OrderQueue
 	if ref.Action == "BUY" {
 		level = o.PriceToBuyOrders[ref.Price]
@@ -309,11 +311,13 @@ func (o *Orderbook) CancelOrder(orderID string) bool {
 		level = o.PriceToSellOrders[ref.Price]
 	}
 
+	// TODO: in theory this is not possible, should we make it panic-free
 	if level == nil {
 		delete(o.OrderIDToRef, orderID)
 		return false
 	}
 
+	// Flush order from level
 	removed := level.Remove(orderID)
 	if !removed {
 		delete(o.OrderIDToRef, orderID)
@@ -323,6 +327,10 @@ func (o *Orderbook) CancelOrder(orderID string) bool {
 	o.decrementOpenOrderCount()
 	delete(o.OrderIDToRef, orderID)
 
+	// Flush level if empty, this is not good as new order might re alloc
+	// price levels on demand. But we need to keep it for now to keep cache locality
+	// we should consider offloading level management to a pool of price level malloc
+	// which will go down the cache but still be faster than alloc
 	if level.Len() == 0 {
 		if ref.Action == "BUY" {
 			delete(o.PriceToBuyOrders, ref.Price)

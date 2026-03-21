@@ -215,6 +215,7 @@ func (me *MatchingEngine) Process(inOrder *Order, producerChannel chan<- Trade, 
 	}()
 
 	if strings.EqualFold(inOrder.Action, "CANCEL") {
+		fmt.Printf("DEBUG: received cancel order order_id=%s\n", inOrder.OrderID)
 		me.orderBook.CancelOrder(inOrder.OrderID)
 		return
 	}
