@@ -83,7 +83,7 @@ func fromProtoOrder(order *contracts.Order) Order {
 		OrderID:   order.OrderId,
 		OrderType: order.OrderType,
 		Price:     order.Price,
-		Quantity:  order.Quantity,
+		Quantity:  int64(order.Quantity),
 		Action:    order.Action,
 		Timestamp: order.Timestamp,
 	}
