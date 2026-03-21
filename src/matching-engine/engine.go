@@ -196,7 +196,7 @@ func (me *MatchingEngine) Start(ctx context.Context) {
 
 // Min returns the smaller of two int64 values.
 // TODO: remove once the module's go directive is bumped to 1.21+; use the built-in min() instead.
-func Min(a, b int64) int64 {
+func Min(a, b uint64) uint64 {
 	if a < b {
 		return a
 	}

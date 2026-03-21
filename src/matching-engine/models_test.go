@@ -36,12 +36,15 @@ func TestMessageToOrderValid(t *testing.T) {
 	}
 }
 
-func TestMessageToOrderRejectsOverflowQuantity(t *testing.T) {
+func TestMessageToOrderAcceptsLargeUnsignedQuantity(t *testing.T) {
 	message := encodeOrderMessage(t, &contracts.Order{OrderId: "uuid-3", OrderType: "limit", Price: 11.0, Quantity: uint64(math.MaxInt64) + 1, Action: "SELL", Timestamp: 1700000002})
-	_, err := messageToOrder(message)
+	order, err := messageToOrder(message)
 
-	if err == nil {
-		t.Fatalf("expected reject for overflow quantity")
+	if err != nil {
+		t.Fatalf("expected large unsigned quantity to be accepted, got error: %v", err)
+	}
+	if order.Quantity != uint64(math.MaxInt64)+1 {
+		t.Fatalf("unexpected parsed quantity: got %d", order.Quantity)
 	}
 }
 

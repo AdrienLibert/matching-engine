@@ -16,7 +16,7 @@ message Order {
 message Trade {
   string trade_id = 1;
   string order_id = 2;
-  int64 quantity = 3;
+  uint64 quantity = 3;
   double price = 4;
   string action = 5;
   string status = 6;

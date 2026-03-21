@@ -12,7 +12,7 @@ type Order struct {
 	OrderID   string  `json:"order_id"`
 	OrderType string  `json:"order_type"`
 	Price     float64 `json:"price"`
-	Quantity  int64   `json:"quantity"`
+	Quantity  uint64  `json:"quantity"`
 	Action    string  `json:"action"`
 	Timestamp int64   `json:"timestamp"`
 }
@@ -20,7 +20,7 @@ type Order struct {
 type Trade struct {
 	TradeId   string  `json:"trade_id"`
 	OrderId   string  `json:"order_id"`
-	Quantity  int64   `json:"quantity"`
+	Quantity  uint64  `json:"quantity"`
 	Price     float64 `json:"price"`
 	Action    string  `json:"action"`
 	Status    string  `json:"status"`
@@ -83,7 +83,7 @@ func fromProtoOrder(order *contracts.Order) Order {
 		OrderID:   order.OrderId,
 		OrderType: order.OrderType,
 		Price:     order.Price,
-		Quantity:  int64(order.Quantity),
+		Quantity:  order.Quantity,
 		Action:    order.Action,
 		Timestamp: order.Timestamp,
 	}
@@ -105,7 +105,7 @@ func pricePointToProto(pricePoint PricePoint) *contracts.PricePoint {
 	return &contracts.PricePoint{Price: pricePoint.Price}
 }
 
-func createTrade(tradeId string, orderID string, remainingQuantity int64, tradeQuantity int64, price float64, action string, ts int64) Trade {
+func createTrade(tradeId string, orderID string, remainingQuantity uint64, tradeQuantity uint64, price float64, action string, ts int64) Trade {
 	var status string
 
 	if remainingQuantity == 0 {

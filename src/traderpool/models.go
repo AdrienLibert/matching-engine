@@ -12,7 +12,7 @@ type Order struct {
 type Trade struct {
 	TradeId   string  `json:"trade_id"`
 	OrderId   string  `json:"order_id"`
-	Quantity  int64   `json:"quantity"`
+	Quantity  uint64  `json:"quantity"`
 	Price     float64 `json:"price"`
 	Action    string  `json:"action"`
 	Status    string  `json:"status"`
