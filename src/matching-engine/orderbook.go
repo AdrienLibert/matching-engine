@@ -313,6 +313,7 @@ func (o *Orderbook) CancelOrder(orderID string) bool {
 
 	// TODO: in theory this is not possible, should we make it panic-free
 	if level == nil {
+		o.removePriceFromHeap(ref.Action, ref.Price)
 		delete(o.OrderIDToRef, orderID)
 		return false
 	}
@@ -320,6 +321,7 @@ func (o *Orderbook) CancelOrder(orderID string) bool {
 	// Flush order from level
 	removed := level.Remove(orderID)
 	if !removed {
+		o.removePriceFromHeap(ref.Action, ref.Price)
 		delete(o.OrderIDToRef, orderID)
 		return false
 	}
@@ -334,9 +336,11 @@ func (o *Orderbook) CancelOrder(orderID string) bool {
 	if level.Len() == 0 {
 		if ref.Action == "BUY" {
 			delete(o.PriceToBuyOrders, ref.Price)
+			o.removePriceFromHeap(ref.Action, ref.Price)
 		}
 		if ref.Action == "SELL" {
 			delete(o.PriceToSellOrders, ref.Price)
+			o.removePriceFromHeap(ref.Action, ref.Price)
 		}
 	}
 
@@ -358,4 +362,45 @@ func (o *Orderbook) OpenOrderCount() int {
 	}
 
 	return o.openOrderCount
+}
+
+func (o *Orderbook) removePriceFromHeap(action string, price float64) {
+	if o == nil {
+		return
+	}
+
+	if action == "BUY" {
+		o.removePriceFromMaxHeap(price)
+		return
+	}
+
+	if action == "SELL" {
+		o.removePriceFromMinHeap(price)
+	}
+}
+
+func (o *Orderbook) removePriceFromMaxHeap(price float64) {
+	if o == nil || o.BestBid == nil {
+		return
+	}
+
+	for index, currentPrice := range *o.BestBid {
+		if currentPrice == price {
+			heap.Remove(o.BestBid, index)
+			return
+		}
+	}
+}
+
+func (o *Orderbook) removePriceFromMinHeap(price float64) {
+	if o == nil || o.BestAsk == nil {
+		return
+	}
+
+	for index, currentPrice := range *o.BestAsk {
+		if currentPrice == price {
+			heap.Remove(o.BestAsk, index)
+			return
+		}
+	}
 }

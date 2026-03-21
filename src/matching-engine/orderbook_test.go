@@ -340,16 +340,26 @@ func TestOrderbookCancelOrderRemovesLastLevelAndKeepsBestPriceInvariant(t *testi
 	assert.True(t, removed)
 	assert.Equal(t, 1, orderbook.OpenOrderCount())
 	assert.Nil(t, orderbook.PriceToSellOrders[10.0])
-
-	for orderbook.BestAsk.Len() > 0 {
-		peak := orderbook.BestAsk.Peak().(float64)
-		if _, ok := orderbook.PriceToSellOrders[peak]; ok {
-			break
-		}
-		heap.Pop(orderbook.BestAsk)
-	}
-
+	assert.Equal(t, 1, orderbook.BestAsk.Len())
 	assert.Equal(t, 11.0, orderbook.BestAsk.Peak())
+}
+
+func TestOrderbookCancelOrderRemovesBestBidLevelAndKeepsHeapConsistent(t *testing.T) {
+	orderbook := NewOrderBook()
+	now := time.Now().UTC().Unix()
+
+	bestBid := Order{OrderID: "bid-best", OrderType: "limit", Price: 12.0, Quantity: 2, Timestamp: now}
+	nextBid := Order{OrderID: "bid-next", OrderType: "limit", Price: 11.0, Quantity: 3, Timestamp: now}
+
+	orderbook.AddOrder(&bestBid, "BUY")
+	orderbook.AddOrder(&nextBid, "BUY")
+
+	removed := orderbook.CancelOrder("bid-best")
+	assert.True(t, removed)
+	assert.Equal(t, 1, orderbook.OpenOrderCount())
+	assert.Nil(t, orderbook.PriceToBuyOrders[12.0])
+	assert.Equal(t, 1, orderbook.BestBid.Len())
+	assert.Equal(t, 11.0, orderbook.BestBid.Peak())
 }
 
 func TestOrderbookCancelOrderMissingOrderIsNoOp(t *testing.T) {
