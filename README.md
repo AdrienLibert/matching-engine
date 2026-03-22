@@ -17,33 +17,59 @@ In short: traders publish orders -> matching engine processes LOB state -> match
 - **Kafka-init:** one-time job for topics/config of kafka
 - **Matching Engine (Go):** orderbook data structure + matching logic
 - **Traderpool (Go):** order generators/participants
-- **Grafana (TODO):** live monitoring and dashboards
+- **Grafana:** live monitoring and dashboards
 
 ## Structures
 ### Orderbook
 
-The Order represents a simple limit order.
+The `Order` supports create and cancel flows (`BUY` / `SELL` / `CANCEL`).
 ```
 type Order struct {
 	OrderID   string
 	OrderType string
 	Price     float64
-	Quantity  float64
+	Quantity  uint64
+	Action    string
 	Timestamp int64
+}
+```
+
+The matching engine publishes trades and mid-price updates as:
+```
+type Trade struct {
+	TradeId   string
+	OrderId   string
+	Quantity  uint64
+	Price     float64
+	Action    string
+	Status    string
+	Timestamp int64
+}
+
+type PricePoint struct {
+	Price float64
 }
 ```
 
 The Orderbook is the actual data structure holding the orders ready to be filled. Main operations in a matching engine are
 - place order
 - get volume at price
-- cancel - 90%+ of orders are canceled in modern exchanges (TODO)
+- cancel/delete by `order_id`
 
 ```
 type Orderbook struct {
-	BestBid       *MaxHeap
-	BestAsk       *MinHeap
-	PriceToVolume map[float64]float64
-	PriceToOrders map[float64]Order
+	BestBid            *MaxHeap
+	BestAsk            *MinHeap
+	PriceToVolume      map[float64]float64
+	openOrderCount     int
+	PriceToBuyOrders   map[float64]*OrderQueue
+	PriceToSellOrders  map[float64]*OrderQueue
+	OrderIDToRef       map[string]OrderRef
+}
+
+type OrderRef struct {
+	Action string
+	Price  float64
 }
 ```
 
