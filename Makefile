@@ -48,6 +48,11 @@ monitoring-up:
 	helm upgrade --install $(PROMETHEUS_RELEASE) prometheus-community/prometheus -n $(MONITORING_NAMESPACE) --create-namespace -f k8s/helm/values/prometheus-values-local.yaml
 	helm upgrade --install $(GRAFANA_RELEASE) grafana/grafana -n $(MONITORING_NAMESPACE) --create-namespace -f k8s/helm/values/grafana-values-local.yaml
 
+monitoring-grafana-refresh:
+	helm upgrade --install $(GRAFANA_RELEASE) grafana/grafana -n $(MONITORING_NAMESPACE) --create-namespace -f k8s/helm/values/grafana-values-local.yaml
+	kubectl -n $(MONITORING_NAMESPACE) rollout restart deployment/$(GRAFANA_RELEASE)
+	kubectl -n $(MONITORING_NAMESPACE) rollout status deployment/$(GRAFANA_RELEASE) --timeout=180s
+
 monitoring-down:
 	helm uninstall --ignore-not-found $(GRAFANA_RELEASE) -n $(MONITORING_NAMESPACE)
 	helm uninstall --ignore-not-found $(PROMETHEUS_RELEASE) -n $(MONITORING_NAMESPACE)

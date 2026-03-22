@@ -119,3 +119,7 @@ Dashboard validation:
 	- `Mid Price`
 	- `Trade Activity (rate + executions/min)`
 	- `Top of Book (best bid / best ask / spread / open orders)`
+
+## Dashboard
+
+![Orderbook Live Metrics](images/orderbook_live_metrics.png)

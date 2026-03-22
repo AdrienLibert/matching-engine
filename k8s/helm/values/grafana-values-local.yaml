@@ -40,7 +40,7 @@ dashboards:
           "tags": ["orderbook", "matching-engine"],
           "timezone": "browser",
           "schemaVersion": 39,
-          "version": 1,
+          "version": 3,
           "refresh": "5s",
           "time": {
             "from": "now-15m",
@@ -50,7 +50,7 @@ dashboards:
             {
               "id": 1,
               "type": "timeseries",
-              "title": "Mid Price",
+              "title": "L1 + Mid Price",
               "gridPos": {
                 "h": 8,
                 "w": 24,
@@ -58,18 +58,34 @@ dashboards:
                 "y": 0
               },
               "datasource": "Prometheus",
+              "fieldConfig": {
+                "defaults": {
+                  "decimals": 4
+                },
+                "overrides": []
+              },
               "targets": [
                 {
                   "refId": "A",
                   "expr": "orderbook_engine_mid_price",
                   "legendFormat": "mid price"
+                },
+                {
+                  "refId": "B",
+                  "expr": "orderbook_engine_best_bid",
+                  "legendFormat": "best bid"
+                },
+                {
+                  "refId": "C",
+                  "expr": "orderbook_engine_best_ask",
+                  "legendFormat": "best ask"
                 }
               ]
             },
             {
               "id": 2,
               "type": "timeseries",
-              "title": "Trade Activity (rate + executions/min)",
+              "title": "Trade Activity (rate + executions/s)",
               "gridPos": {
                 "h": 8,
                 "w": 24,
@@ -80,20 +96,20 @@ dashboards:
               "targets": [
                 {
                   "refId": "A",
-                  "expr": "rate(orderbook_engine_executed_trades_total[1m])",
+                  "expr": "sum(rate(orderbook_engine_executed_trades_total[5m])) or vector(0)",
                   "legendFormat": "trade rate/s"
                 },
                 {
                   "refId": "B",
-                  "expr": "increase(orderbook_engine_executed_trades_total[1m])",
-                  "legendFormat": "executions/min"
+                  "expr": "(sum(increase(orderbook_engine_executed_trades_total[5m])) / 300) or vector(0)",
+                  "legendFormat": "executions/s"
                 }
               ]
             },
             {
               "id": 3,
               "type": "timeseries",
-              "title": "Top of Book (best bid / best ask / spread / open orders)",
+              "title": "Top of Book (best bid / best ask / spread)",
               "gridPos": {
                 "h": 8,
                 "w": 24,
@@ -116,9 +132,23 @@ dashboards:
                   "refId": "C",
                   "expr": "orderbook_engine_spread",
                   "legendFormat": "spread"
-                },
+                }
+              ]
+            },
+            {
+              "id": 4,
+              "type": "timeseries",
+              "title": "Open Orders",
+              "gridPos": {
+                "h": 8,
+                "w": 24,
+                "x": 0,
+                "y": 24
+              },
+              "datasource": "Prometheus",
+              "targets": [
                 {
-                  "refId": "D",
+                  "refId": "A",
                   "expr": "orderbook_engine_open_order_count",
                   "legendFormat": "open orders"
                 }
